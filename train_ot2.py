@@ -16,7 +16,7 @@ from ot2_gym_wrapper import OT2Env
 # ============================================================================
 PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME
 BRANCH_NAME = "your_name"   # UPDATE WITH YOUR BRANCH NAME
-OT2_WRAPPER = "your_name_ot2_gym_wrapper.py"
+ENTRYPOINT = "your_name_train_ot2.py" # UPDATE WITH THE NAME OF THIS FILE E.G. aaron_train_ot2.py
 
 # ============================================================================
 # ClearML Setup - DO NOT CHANGE THIS!
@@ -32,7 +32,7 @@ task.set_script(
     repository='https://github.com/AaronCiuffo245484/Y2B25_Task_11.git',
     branch=BRANCH_NAME,
     working_dir='.',
-    entry_point=OT2_WRAPPER,  # UPDATE WITH YOUR FILENAME
+    entry_point=ENTRYPOINT,  # UPDATE WITH YOUR FILENAME
 )
 
 # ============================================================================
