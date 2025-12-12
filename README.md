@@ -2,17 +2,22 @@
 
 ## Prerequisites
 
-1. **VPN Connection Required**
+1. **ClearML Setup (One-Time)**
+   - Follow the setup instructions here: [Remote Training with ClearML](https://adsai.buas.nl/Study%20Content/Robotics%20and%20Reinforcement%20Learning/14.%20Remote%20RL%20Training.html#remote-training-with-clearml)
+   - This includes installing ClearML and configuring credentials
+   - Only needs to be done once per environment
+
+2. **VPN Connection Required**
    - You MUST be connected to the BUAS VPN to access the ClearML server and GPU queue
    - Connect to VPN before running any training jobs
 
-2. **Repository Setup**
-   - Clone the repository
+3. **Repository Setup**
+   - Clone the repository: `git clone https://github.com/AaronCiuffo245484/Y2B25_Task_11`
    - Create your own branch: `git checkout -b your_name_branch`
    - Activate your y2b25 python environment
    - Install local dependencies: `pip install gymnasium stable-baselines3 pybullet numpy`
 
-3. **Required Files in Your Branch**
+4. **Required Files in Your Branch**
    - `your_name_train_ot2.py` - Your training script
    - `your_name_ot2_gym_wrapper.py` - Your gym wrapper
    - `sim_class.py` - Simulation class (provided)
