@@ -8,18 +8,18 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-# Import your wrapper
-from ot2_gym_wrapper import OT2Env
+# Import your wrapper - UPDATE THIS TO MATCH YOUR WRAPPER FILENAME
+from your_name_ot2_gym_wrapper import OT2Env  # e.g., from aaron_ot2_gym_wrapper import OT2Env
 
 # ============================================================================
 # CONFIGURATION - UPDATE THESE
 # ============================================================================
-PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME
-BRANCH_NAME = "your_name"   # UPDATE WITH YOUR BRANCH NAME
-ENTRYPOINT = "your_name_train_ot2.py" # UPDATE WITH THE NAME OF THIS FILE E.G. aaron_train_ot2.py
+PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME (e.g., "aaron")
+BRANCH_NAME = "your_branch"   # UPDATE WITH YOUR BRANCH NAME (e.g., "aaron_branch")
+ENTRYPOINT = "your_name_train_ot2.py"  # UPDATE WITH THIS FILENAME (e.g., "aaron_train_ot2.py")
 
 # ============================================================================
-# ClearML Setup - DO NOT CHANGE THIS!
+# ClearML Setup - DO NOT CHANGE BELOW THIS LINE
 # ============================================================================
 task = Task.init(
     project_name='Mentor Group - Jason/Group 1', 
@@ -32,7 +32,7 @@ task.set_script(
     repository='https://github.com/AaronCiuffo245484/Y2B25_Task_11.git',
     branch=BRANCH_NAME,
     working_dir='.',
-    entry_point=ENTRYPOINT,  # UPDATE WITH YOUR FILENAME
+    entry_point=ENTRYPOINT,
 )
 
 # ============================================================================
@@ -95,6 +95,9 @@ model.learn(
     tb_log_name=f"PPO_{filename}"
 )
 
+# ============================================================================
+# Save and Upload Model
+# ============================================================================
 # Save model
 model_dir = Path("models") / PERSON_NAME
 model_dir.mkdir(parents=True, exist_ok=True)
@@ -102,8 +105,10 @@ model_path = model_dir / filename
 model.save(model_path)
 print(f"\nModel saved: {model_path}")
 
-# Upload to ClearML
-task.upload_artifact(name='final_model', artifact_object=str(model_path) + '.zip')
+# Upload to ClearML (follows documentation pattern)
+model_zip = f"{filename}.zip"
+task.upload_artifact("model", artifact_object=model_zip)
+print(f"Uploaded artifact: {model_zip}")
 
 print("\nTraining complete!")
 env.close()
