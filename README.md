@@ -50,7 +50,7 @@ PERSON_NAME = "your_name"  # e.g., "jane_doe"
 BRANCH_NAME = "your_branch"  # e.g., "jane_branch"
 
 # Line 19
-entry_point='your_name_train_ot2.py',  # Match your filename
+ENTRYPOINT='your_name_train_ot2.py',  # Match your filename
 ```
 
 ### 3. Copy and Rename the Example Wrapper 
