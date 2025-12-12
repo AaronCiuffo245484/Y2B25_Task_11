@@ -1,5 +1,12 @@
 # OT2 RL Training - Getting Started Guide
 
+
+## Key Concepts
+
+- ClearML makes it easy to test different hyper parameters on a remote server
+- All of your work needs to reside on a git branch within the repo
+- Make sure you commit your changes before starting a job!
+
 ## Prerequisites
 
 1. **ClearML Setup (One-Time)**
@@ -22,27 +29,6 @@
    - `your_name_ot2_gym_wrapper.py` - Your gym wrapper
    - `sim_class.py` - Simulation class (provided)
    - `requirements.txt` - Dependencies for remote server
-
-## Quick Start - Fastest Test
-
-This minimal test will verify your setup works (runs in ~1 minute):
-
-```bash
-python your_name_train_ot2.py --total_timesteps 512 --n_steps 256 --batch_size 32
-```
-
-**What this does:**
-- Uses small batch size and step count
-- Runs only 512 total timesteps
-- Tests that ClearML connection works
-- Verifies your wrapper loads correctly
-- Confirms model can save
-
-**Expected output:**
-- Script will print "Training Configuration" details
-- ClearML will queue the job on the remote server
-- You'll see a link to the ClearML dashboard
-- Job should complete in ~1 minute
 
 ## Setup Your Training Script
 
@@ -67,7 +53,22 @@ BRANCH_NAME = "your_branch"  # e.g., "jane_branch"
 entry_point='your_name_train_ot2.py',  # Match your filename
 ```
 
-### 3. Commit and Push
+### 3. Copy and Rename the Example Wrapper 
+
+
+```bash
+cp example_ot2_gym_wrapper.py your_name_ot2_gym_wrapper.py
+```
+
+**Alternatively:** Copy your own wrapper into the repo. Make sure the name matches the convention `your_name_ot2_gym_wrapper.py`
+
+Alter the import at the top of your `your_name_train_ot2.py` to match the name of your wrapper:
+
+```Python
+from aaron_ot2_gym_wrapper import OT2Env
+```
+
+### 4. Commit and Push
 
 ```bash
 git add your_name_train_ot2.py your_name_ot2_gym_wrapper.py requirements.txt sim_class.py
@@ -75,27 +76,9 @@ git commit -m "Add training setup"
 git push origin your_branch
 ```
 
-## Create Your Wrapper
+## Update Your Wrapper
 
-### 1. Copy the Example
-
-```bash
-cp example_ot2_gym_wrapper.py your_name_ot2_gym_wrapper.py
-```
-
-### 2. Update the Import in Your Training Script
-
-Edit your `your_name_train_ot2.py` to import from your wrapper:
-
-```python
-# Change this line:
-from ot2_gym_wrapper import OT2Env
-
-# To this:
-from your_name_ot2_gym_wrapper import OT2Env
-```
-
-### 3. Modify the Reward Function (Optional)
+### Modify the Reward Function (Optional)
 
 The key method to experiment with is `_calculate_reward()` around line 145:
 
@@ -120,7 +103,7 @@ def _calculate_reward(self, current_pos, distance_to_goal):
     return reward
 ```
 
-### 4. Test Locally (Optional but Recommended)
+### Test Locally (Optional but Recommended)
 
 ```python
 from stable_baselines3.common.env_checker import check_env
