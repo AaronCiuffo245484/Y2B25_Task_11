@@ -15,19 +15,20 @@
 3. **Required Files in Your Branch**
    - `your_name_train_ot2.py` - Your training script
    - `your_name_ot2_gym_wrapper.py` - Your gym wrapper
+   - `sim_class.py` - Simulation class (provided)
    - `requirements.txt` - Dependencies for remote server
 
 ## Quick Start - Fastest Test
 
-This minimal test will verify your setup works (runs relatively quickly):
+This minimal test will verify your setup works (runs in ~1 minute):
 
 ```bash
-python RL_pendulum_training.py --total_timesteps 512 --n_steps 256 --batch_size 32 --n_epochs 1
+python your_name_train_ot2.py --total_timesteps 512 --n_steps 256 --batch_size 32
 ```
 
 **What this does:**
 - Uses small batch size and step count
-- Runs only 5,000 total timesteps
+- Runs only 512 total timesteps
 - Tests that ClearML connection works
 - Verifies your wrapper loads correctly
 - Confirms model can save
@@ -36,7 +37,7 @@ python RL_pendulum_training.py --total_timesteps 512 --n_steps 256 --batch_size 
 - Script will print "Training Configuration" details
 - ClearML will queue the job on the remote server
 - You'll see a link to the ClearML dashboard
-- Job should complete in 2-3 minutes
+- Job should complete in ~1 minute
 
 ## Setup Your Training Script
 
@@ -64,7 +65,7 @@ entry_point='your_name_train_ot2.py',  # Match your filename
 ### 3. Commit and Push
 
 ```bash
-git add your_name_train_ot2.py your_name_ot2_gym_wrapper.py
+git add your_name_train_ot2.py your_name_ot2_gym_wrapper.py requirements.txt sim_class.py
 git commit -m "Add training setup"
 git push origin your_branch
 ```
@@ -77,7 +78,19 @@ git push origin your_branch
 cp example_ot2_gym_wrapper.py your_name_ot2_gym_wrapper.py
 ```
 
-### 2. Modify the Reward Function (Optional)
+### 2. Update the Import in Your Training Script
+
+Edit your `your_name_train_ot2.py` to import from your wrapper:
+
+```python
+# Change this line:
+from ot2_gym_wrapper import OT2Env
+
+# To this:
+from your_name_ot2_gym_wrapper import OT2Env
+```
+
+### 3. Modify the Reward Function (Optional)
 
 The key method to experiment with is `_calculate_reward()` around line 145:
 
@@ -102,11 +115,11 @@ def _calculate_reward(self, current_pos, distance_to_goal):
     return reward
 ```
 
-### 3. Test Locally (Optional but Recommended)
+### 4. Test Locally (Optional but Recommended)
 
 ```python
 from stable_baselines3.common.env_checker import check_env
-from ot2_gym_wrapper import OT2Env
+from your_name_ot2_gym_wrapper import OT2Env
 
 env = OT2Env()
 check_env(env)  # Verifies gym compliance
@@ -115,9 +128,14 @@ print("Wrapper passed checks!")
 
 ## Running Training Jobs
 
-### Fast Test (2-3 minutes)
+### Fast Test (~1 minute)
 ```bash
-python your_name_train_ot2.py --learning_rate 0.001 --batch_size 32 --n_steps 256 --total_timesteps 5000
+python your_name_train_ot2.py --total_timesteps 512 --n_steps 256 --batch_size 32
+```
+
+### Quick Test (~5 minutes)
+```bash
+python your_name_train_ot2.py --total_timesteps 5000 --n_steps 256 --batch_size 32
 ```
 
 ### Standard Training (30-60 minutes)
@@ -133,10 +151,10 @@ python your_name_train_ot2.py --learning_rate 0.0003 --batch_size 64 --n_steps 2
 ### Experiment with Hyperparameters
 ```bash
 # Higher learning rate
-python your_name_train_ot2.py --learning_rate 0.001
+python your_name_train_ot2.py --learning_rate 0.001 --total_timesteps 100000
 
 # Larger batch
-python your_name_train_ot2.py --batch_size 128 --n_steps 4096
+python your_name_train_ot2.py --batch_size 128 --n_steps 4096 --total_timesteps 100000
 
 # Quick test with different settings
 python your_name_train_ot2.py --learning_rate 0.0001 --batch_size 32 --n_steps 512 --total_timesteps 10000
@@ -175,12 +193,23 @@ Where:
 
 ```
 your_repo/
-├── your_name_train_ot2.py      # Your training script
-├── ot2_gym_wrapper.py          # Your gym wrapper
-├── example_ot2_gym_wrapper.py  # Reference example
-├── requirements.txt            # Remote dependencies
+├── train_ot2.py                    # Template training script
+├── your_name_train_ot2.py          # Your training script
+├── example_ot2_gym_wrapper.py      # Example wrapper (reference)
+├── your_name_ot2_gym_wrapper.py    # Your gym wrapper
+├── sim_class.py                    # Simulation class (provided)
+├── requirements.txt                # Remote dependencies
 └── models/
-    └── your_name/             # Saved models (created during training)
+    └── your_name/                  # Saved models (created during training)
+```
+
+## Required Files: requirements.txt
+
+Create this file in your repository root:
+
+```
+clearml
+tensorboard
 ```
 
 ## Troubleshooting
@@ -205,11 +234,16 @@ your_repo/
   - Wrapper file not in repository
   - BRANCH_NAME doesn't match actual branch
   - entry_point doesn't match filename
-  - Missing library/ folder
+  - Missing sim_class.py file
 
-### "ModuleNotFoundError: No module named 'library'"
-- Verify `library/` folder is committed to your branch
-- Check that `library/simulation.py` and `library/robot_control.py` exist
+### "ModuleNotFoundError: No module named 'sim_class'"
+- Verify `sim_class.py` is committed to your branch
+- Check that file exists in repository root
+
+### "ModuleNotFoundError: No module named 'your_name_ot2_gym_wrapper'"
+- Verify you updated the import in your training script
+- Check that your wrapper file is committed
+- Ensure the filename in the import matches your actual file
 
 ### Model file not found
 - Check that `models/` directory was created
@@ -252,15 +286,16 @@ your_repo/
 ```bash
 # 1. Setup (one time)
 git checkout -b aaron_branch
-cp aaron_train_ot2.py aaron_train_ot2.py
+cp train_ot2.py aaron_train_ot2.py
 # Edit aaron_train_ot2.py (update PERSON_NAME, BRANCH_NAME, entry_point)
 
 # 2. Create wrapper
-cp example_ot2_gym_wrapper.py ot2_gym_wrapper.py
-# Optionally modify _calculate_reward()
+cp example_ot2_gym_wrapper.py aaron_ot2_gym_wrapper.py
+# Edit aaron_train_ot2.py to import from aaron_ot2_gym_wrapper
+# Optionally modify _calculate_reward() in wrapper
 
 # 3. Commit
-git add aaron_train_ot2.py ot2_gym_wrapper.py requirements.txt library/
+git add aaron_train_ot2.py aaron_ot2_gym_wrapper.py requirements.txt sim_class.py
 git commit -m "Initial setup"
 git push origin aaron_branch
 
@@ -268,7 +303,7 @@ git push origin aaron_branch
 # Connect to BUAS VPN now!
 
 # 5. Quick test
-python aaron_train_ot2.py --learning_rate 0.001 --batch_size 32 --n_steps 256 --total_timesteps 5000
+python aaron_train_ot2.py --total_timesteps 512 --n_steps 256 --batch_size 32
 
 # 6. Check ClearML dashboard
 # Verify job is running correctly
