@@ -14,9 +14,9 @@ from ot2_gym_wrapper import OT2Env
 # ============================================================================
 # CONFIGURATION - UPDATE THESE
 # ============================================================================
-PERSON_NAME = "aaron_ciuffo"  # UPDATE WITH YOUR NAME
-BRANCH_NAME = "aaron_branch"   # UPDATE WITH YOUR BRANCH NAME
-OT2_WRAPPER = "aaron_ot2_gym_wrapper.py"
+PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME
+BRANCH_NAME = "your_name"   # UPDATE WITH YOUR BRANCH NAME
+OT2_WRAPPER = "your_name_ot2_gym_wrapper.py"
 
 # ============================================================================
 # ClearML Setup - DO NOT CHANGE THIS!
