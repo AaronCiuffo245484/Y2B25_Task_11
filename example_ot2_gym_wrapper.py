@@ -5,8 +5,7 @@ Simplified version aligned with course documentation
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from library.simulation import Simulation
-from library.robot_control import find_workspace
+from sim_class import Simulation
 
 
 class OT2Env(gym.Env):
@@ -45,18 +44,9 @@ class OT2Env(gym.Env):
             dtype=np.float32
         )
         
-        # Get workspace bounds for action scaling
-        workspace = find_workspace(self.sim)
-        self.workspace_low = np.array([
-            workspace['x_min'],
-            workspace['y_min'],
-            workspace['z_min']
-        ], dtype=np.float32)
-        self.workspace_high = np.array([
-            workspace['x_max'],
-            workspace['y_max'],
-            workspace['z_max']
-        ], dtype=np.float32)
+        # OT-2 workspace bounds (fixed values for this robot)
+        self.workspace_low = np.array([-0.1871, -0.1706, 0.1195], dtype=np.float32)
+        self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
         
         # Episode tracking
         self.steps = 0
@@ -128,8 +118,8 @@ class OT2Env(gym.Env):
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # Reward: negative distance (agent wants to minimize distance)
-        reward = float(-distance_to_goal)
+        # Calculate reward
+        reward = self._calculate_reward(current_pos, distance_to_goal)
         
         # Terminated: goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
@@ -155,6 +145,29 @@ class OT2Env(gym.Env):
     def close(self):
         """Close the simulation"""
         self.sim.close()
+    
+    def _calculate_reward(self, current_pos, distance_to_goal):
+        """
+        Calculate reward based on current state.
+        
+        MODIFY THIS METHOD to experiment with different reward functions.
+        
+        Args:
+            current_pos: Current pipette position [x, y, z]
+            distance_to_goal: Euclidean distance to goal
+        
+        Returns:
+            reward: Float reward value
+        
+        Examples of alternative reward functions:
+        - Sparse: return 1.0 if distance < threshold else 0.0
+        - Shaped: return -distance_to_goal - 0.01 * step_penalty
+        - Exponential: return -np.exp(distance_to_goal)
+        """
+        # Simple negative distance reward
+        reward = float(-distance_to_goal)
+        
+        return reward
     
     def _extract_position(self, state_dict):
         """
