@@ -57,13 +57,13 @@ cp train_ot2.py your_name_train_ot2.py
 Edit these lines in your training script:
 
 ```python
-# Line 15
+# Line 17
 PERSON_NAME = "your_name"  # e.g., "jane_doe"
 
-# Line 16  
+# Line 18  
 BRANCH_NAME = "your_branch"  # e.g., "jane_branch"
 
-# Line 31
+# Line 19
 entry_point='your_name_train_ot2.py',  # Match your filename
 ```
 
