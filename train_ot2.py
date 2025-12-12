@@ -7,6 +7,7 @@ from clearml import Task
 import argparse
 from pathlib import Path
 from datetime import datetime
+import os
 
 # Import your wrapper - UPDATE THIS TO MATCH YOUR WRAPPER FILENAME
 from your_name_ot2_gym_wrapper import OT2Env  # e.g., from aaron_ot2_gym_wrapper import OT2Env
@@ -18,12 +19,18 @@ PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME (e.g., "aaron")
 BRANCH_NAME = "your_branch"   # UPDATE WITH YOUR BRANCH NAME (e.g., "aaron_branch")
 ENTRYPOINT = "your_name_train_ot2.py"  # UPDATE WITH THIS FILENAME (e.g., "aaron_train_ot2.py")
 
+# Generate timestamp for unique task name and model filename
+timestamp = datetime.now().strftime("%y%m%d.%H%M")
+
 # ============================================================================
 # ClearML Setup - DO NOT CHANGE BELOW THIS LINE
 # ============================================================================
+# Create unique task name
+task_name = f'OT2_RL_{PERSON_NAME}_{timestamp}'
+
 task = Task.init(
     project_name='Mentor Group - Jason/Group 1', 
-    task_name='OT2_RL_Training',
+    task_name=task_name,
 )
 
 task.set_base_docker('deanis/2023y2b-rl:latest')
@@ -34,6 +41,9 @@ task.set_script(
     working_dir='.',
     entry_point=ENTRYPOINT,
 )
+
+# Force tensorboard and clearml to install
+task.set_packages(['tensorboard', 'clearml'])
 
 # ============================================================================
 # Command Line Arguments - BEFORE execute_remotely()
@@ -55,7 +65,7 @@ def format_lr(lr):
     """Convert learning rate to scientific notation string for filename"""
     return f"{lr:.0e}".replace("+", "").replace("-0", "-")
 
-timestamp = datetime.now().strftime("%y%m%d.%H%M")
+# Use timestamp from above and generate model filename (NO .zip extension)
 lr_str = format_lr(args.learning_rate)
 filename = f"{timestamp}_{PERSON_NAME}_lr{lr_str}_b{args.batch_size}_s{args.n_steps}"
 
@@ -98,17 +108,19 @@ model.learn(
 # ============================================================================
 # Save and Upload Model
 # ============================================================================
-# Save model
-model_dir = Path("models") / PERSON_NAME
-model_dir.mkdir(parents=True, exist_ok=True)
-model_path = model_dir / filename
-model.save(model_path)
-print(f"\nModel saved: {model_path}")
+# Save model with .zip extension
+model_name = f"{filename}.zip"
+model.save(model_name)
+print(f"\nModel saved: {model_name}")
 
-# Upload to ClearML (follows documentation pattern)
-model_zip = f"{filename}.zip"
-task.upload_artifact("model", artifact_object=model_zip)
-print(f"Uploaded artifact: {model_zip}")
+# Upload artifact with .zip extension
+task.upload_artifact("model", artifact_object=model_name)
+print(f"Artifact uploaded: {model_name}")
 
 print("\nTraining complete!")
-env.close()
+
+# Close environment safely
+try:
+    env.close()
+except:
+    pass  # Already disconnected
