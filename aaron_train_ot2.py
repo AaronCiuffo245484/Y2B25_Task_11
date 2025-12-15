@@ -10,14 +10,14 @@ from datetime import datetime
 import os
 
 # Import your wrapper - UPDATE THIS TO MATCH YOUR WRAPPER FILENAME
-from your_name_ot2_gym_wrapper import OT2Env  # e.g., from aaron_ot2_gym_wrapper import OT2Env
+from aaron_ot2_gym_wrapper import OT2Env  # e.g., from aaron_ot2_gym_wrapper import OT2Env
 
 # ============================================================================
 # CONFIGURATION - UPDATE THESE
 # ============================================================================
-PERSON_NAME = "your_name"  # UPDATE WITH YOUR NAME (e.g., "aaron")
-BRANCH_NAME = "your_branch"   # UPDATE WITH YOUR BRANCH NAME (e.g., "aaron_branch")
-ENTRYPOINT = "your_name_train_ot2.py"  # UPDATE WITH THIS FILENAME (e.g., "aaron_train_ot2.py")
+PERSON_NAME = "aaron"  # UPDATE WITH YOUR NAME (e.g., "aaron")
+BRANCH_NAME = "aaron"   # UPDATE WITH YOUR BRANCH NAME (e.g., "aaron_branch")
+ENTRYPOINT = "aaron_train_ot2.py"  # UPDATE WITH THIS FILENAME (e.g., "aaron_train_ot2.py")
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
@@ -52,7 +52,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--learning_rate", type=float, default=0.0003)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--n_steps", type=int, default=2048)
-parser.add_argument("--total_timesteps", type=int, default=100000)
+parser.add_argument("--total_timesteps", type=int, default=1000000)
 args = parser.parse_args()
 
 # Execute remotely AFTER capturing arguments
