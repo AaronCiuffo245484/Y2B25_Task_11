@@ -220,12 +220,18 @@ class OT2Env(gym.Env):
         # reward = float(-distance_to_goal)
 
         # Shaped with goal bonus
-        reward = -distance_to_goal
-        if distance_to_goal < self.target_threshold:
-            reward += 100.0         
+        # reward = -distance_to_goal
+        # if distance_to_goal < self.target_threshold:
+        #     reward += 100.0         
         
-        return reward
-    
+        # return reward
+
+        # Quadratic distance penalty + goal bonus + time penalty
+        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0
+
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
