@@ -224,13 +224,13 @@ class OT2Env(gym.Env):
         # if distance_to_goal < self.target_threshold:
         #     reward += 100.0         
         
-        # return reward
 
         # Quadratic distance penalty + goal bonus + time penalty
         max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
         reward = -(distance_to_goal / max_dist) ** 2 - 0.01
         if distance_to_goal < self.target_threshold:
             reward += 100.0
+        return reward
 
     # ========================================================================
     # HELPER METHODS
