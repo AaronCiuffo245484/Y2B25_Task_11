@@ -1,251 +1,284 @@
-# ---
-# jupyter:
-#   jupytext:
-#     text_representation:
-#       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.15.2
-#   kernelspec:
-#     display_name: Python 3 (GPU Balanced)
-#     language: python
-#     name: python3
-# ---
+"""
+OT2 Gym Wrapper
+Custom Gymnasium environment for OT-2 robot control
 
-# %reload_ext autoreload
-# %autoreload 2
-
-from library.simulation import Simulation
-from library.robot_control import find_workspace, get_position, get_velocities
+Author: Aaron Ciuffo
+Course: ADS-AI Y2B Block B - Task 11
+"""
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+from sim_class import Simulation
 
 
 class OT2Env(gym.Env):
-    def __init__(self, render=False, max_steps=1000,
-                 action_space=None,
-                 target=None,
-                 target_threshold=0.001):
+    """
+    Custom Gymnasium environment for OT-2 robot control.
+    
+    Goal: Train agent to move pipette tip to random target positions within workspace.
+    
+    Observation Space: 6D [current_x, current_y, current_z, goal_x, goal_y, goal_z]
+    Action Space: 3D [x, y, z] normalized to [-1, 1]
+    Reward: Negative distance to goal (baseline - can be modified)
+    
+    Parameters
+    ----------
+    render : bool
+        Whether to render the simulation visually
+    max_steps : int
+        Maximum steps per episode before truncation
+    target_threshold : float
+        Distance threshold (meters) for successful goal achievement
+    """
+    
+    def __init__(self, render=False, max_steps=1000, target_threshold=0.001):
         super(OT2Env, self).__init__()
-        self.render = render
-        self.max_steps = max_steps
-
-        # Create the simulation environment
-        self.sim = Simulation(num_agents=1, render=render)
-
-        # Define action and observation space
-        self.action_space = None
-        self.observation_space = None
         
-        self.target = target
+        self.render_mode = render
+        self.max_steps = max_steps
         self.target_threshold = target_threshold
-
-        # keep track of the number of steps
+        
+        # Create simulation
+        self.sim = Simulation(num_agents=1, render=render)
+        
+        # Define action space: normalized [-1, 1] for RL algorithms
+        self.action_space = spaces.Box(
+            low=np.array([-1.0, -1.0, -1.0], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
+            dtype=np.float32
+        )
+        
+        # Define observation space: 6D [pos_x, pos_y, pos_z, goal_x, goal_y, goal_z]
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(6,),
+            dtype=np.float32
+        )
+        
+        # OT-2 workspace bounds (fixed values from robot specifications)
+        self.workspace_low = np.array([-0.1871, -0.1706, 0.1195], dtype=np.float32)
+        self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
+        
+        # Episode tracking
         self.steps = 0
         self.goal_position = None
-
-    @property
-    def observation_space(self):
-        return self._observation_space
     
-    @observation_space.setter
-    def observation_space(self, obs_space):
-        if not obs_space:
-            low = -np.inf
-            high = np.inf
-            shape = (9, )
-            d_type = np.float32
-
-            obs_space = (low, high, shape, d_type)
-
-        self._observation_space = spaces.Box(*obs_space)
-
-    @property
-    def action_space(self):
-        return self._action_space
-    
-    @action_space.setter
-    def action_space(self, action_space=None):
-        if not action_space:
-            # Action space is ALWAYS [-1, 1] for RL
-            low = np.array([-1.0, -1.0, -1.0], dtype=np.float32)
-            high = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-            shape = (3, )
-            d_type = np.float32
-            action_space = (low, high, shape, d_type)
-        
-        self._action_space = spaces.Box(*action_space)
-
-        # Store workspace bounds for scaling later
-        workspace = find_workspace(self.sim)
-        self.workspace_low = np.array([workspace['x_min'],
-                                    workspace['y_min'],
-                                    workspace['z_min']], dtype=np.float32)
-        self.workspace_high = np.array([workspace['x_max'],
-                                        workspace['y_max'],
-                                        workspace['z_max']], dtype=np.float32)        
-        
-
     def reset(self, seed=None):
-        # being able to set a seed is required for reproducibility
+        """
+        Reset environment to initial state with new random goal.
+        
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed for reproducibility
+        
+        Returns
+        -------
+        observation : np.ndarray
+            6D array [current_pos, goal_pos]
+        info : dict
+            Empty dictionary (for Gymnasium compatibility)
+        """
+        # Set seed for reproducibility
         if seed is not None:
             np.random.seed(seed)
-
-        # Reset the state of the environment to an initial state
-        # set a random goal position for the agent, consisting of x, y, and z coordinates within the working area
-        self.goal_position = np.array([
-            np.random.uniform(self.workspace_low[0], self.workspace_high[0]),
-            np.random.uniform(self.workspace_low[1], self.workspace_high[1]),
-            np.random.uniform(self.workspace_low[2], self.workspace_high[2])], 
-            dtype=np.float32)
-
-        # Call the environment reset function
+        
+        # Generate random goal within workspace
+        self.goal_position = np.random.uniform(
+            self.workspace_low,
+            self.workspace_high
+        ).astype(np.float32)
+        
+        # Reset simulation
         state_dict = self.sim.reset(num_agents=1)
         
-        # Extract observation
-        current_pos, current_vel = self._extract_observation(state_dict)
-
-        observation = np.concatenate([
-            current_pos,
-            current_vel,
-            self.goal_position], 
-            dtype=np.float32)
-
-        # Reset the number of steps
+        # Extract current position
+        current_pos = self._extract_position(state_dict)
+        
+        # Create observation
+        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        
+        # Reset step counter
         self.steps = 0
-
+        
         info = {}
         return observation, info
-
+    
     def step(self, action):
+        """
+        Execute one step in the environment.
+        
+        Parameters
+        ----------
+        action : np.ndarray
+            3D array normalized to [-1, 1]
+        
+        Returns
+        -------
+        observation : np.ndarray
+            6D array [current_pos, goal_pos]
+        reward : float
+            Reward value for this step
+        terminated : bool
+            True if goal reached (task success)
+        truncated : bool
+            True if max steps reached (timeout)
+        info : dict
+            Dictionary with debugging information
+        """
         # Scale action from [-1, 1] to workspace bounds
         scaled_action = self.workspace_low + (action + 1.0) * (self.workspace_high - self.workspace_low) / 2.0
         
-        # Execute one time step within the environment
+        # Append 0 for drop action (not used in this task)
         full_action = [*scaled_action, 0]
-
-        # Call the environment step function
-        state_dict = self.sim.run([full_action])
-
-        # Extract observations
-        current_pos, current_vel = self._extract_observation(state_dict)
-
-        observation = np.concatenate([
-            current_pos,
-            current_vel,
-            self.goal_position], 
-            dtype=np.float32
-            )
-
-        # Distance to Goal
-        distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
-
-        # Calculate the reward with improved structure
-        reward = self._calculate_reward(current_pos, current_vel, distance_to_goal)
         
-        # Check if task is complete
+        # Execute action in simulation
+        state_dict = self.sim.run([full_action])
+        
+        # Extract current position
+        current_pos = self._extract_position(state_dict)
+        
+        # Create observation
+        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        
+        # Calculate distance to goal
+        distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
+        
+        # Calculate reward
+        reward = self._calculate_reward(current_pos, distance_to_goal)
+        
+        # Terminated: goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
         
-        # Check truncation - max steps reached
+        # Truncated: max steps reached
         truncated = bool(self.steps >= self.max_steps)
         
-        # Info for debugging and logging
+        # Info for debugging and callback logging
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
             'goal_position': self.goal_position.tolist()
         }
         
-        # increment the number of steps
         self.steps += 1
-
+        
         return observation, reward, terminated, truncated, info
-
-    def _calculate_reward(self, current_pos, current_vel, distance_to_goal):
-        """
-        Reward structure prioritizing:
-        1. Precision - large bonus for reaching goal
-        2. Distance shaping - quadratic penalty when far from goal
-        3. Smoothness - penalty for excessive velocity
-        4. Speed - small time penalty to encourage efficiency
-        
-        Parameters:
-        -----------
-        current_pos : np.ndarray
-            Current XYZ position
-        current_vel : np.ndarray
-            Current XYZ velocities
-        distance_to_goal : float
-            Euclidean distance to goal
-        
-        Returns:
-        --------
-        float
-            Computed reward
-        """
-        reward = 0.0
-        
-        # 1. Goal achievement bonus (most important)
-        if distance_to_goal < self.target_threshold:  # <1mm
-            reward += 100.0
-        
-        # 2. Distance shaping (quadratic - stronger penalty when far)
-        # Scaled so max penalty ~-1.0 at workspace limits
-        max_distance = np.linalg.norm(self.workspace_high - self.workspace_low)
-        reward -= (distance_to_goal / max_distance) ** 2
-        
-        # 3. Velocity penalty (encourages smooth motion)
-        velocity_magnitude = np.linalg.norm(current_vel)
-        reward -= 0.01 * velocity_magnitude
-        
-        # 4. Time penalty (encourages efficiency)
-        reward -= 0.01
-        
-        return float(reward)
-
+    
     def render(self, mode='human'):
+        """Render is handled by simulation if render=True in __init__"""
         pass
     
     def close(self):
+        """Close the simulation"""
         self.sim.close()
-
-    @staticmethod
-    def _extract_observation(state_dict, robotId=None):
+    
+    # ========================================================================
+    # REWARD FUNCTION - MODIFY THIS SECTION FOR EXPERIMENTS
+    # ========================================================================
+    
+    def _calculate_reward(self, current_pos, distance_to_goal):
         """
-        Extract observation from state dictionary.
+        Calculate reward based on current state.
         
-        Parameters:
-        -----------
+        BASELINE: Simple negative distance reward
+        MODIFY THIS METHOD to experiment with different reward functions.
+        
+        Parameters
+        ----------
+        current_pos : np.ndarray
+            Current pipette position [x, y, z]
+        distance_to_goal : float
+            Euclidean distance to goal
+        
+        Returns
+        -------
+        reward : float
+            Reward value for this step
+        
+        Examples of alternative reward functions:
+        --------------------------------------------------------
+        # Sparse reward (only reward at goal)
+        reward = 100.0 if distance_to_goal < self.target_threshold else -0.01
+        
+        # Shaped with goal bonus
+        reward = -distance_to_goal
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0
+        
+        # Quadratic distance penalty + goal bonus + time penalty
+        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0
+        
+        # Exponential shaping
+        reward = -np.exp(distance_to_goal) - 0.01
+        --------------------------------------------------------
+        """
+        # BASELINE: Simple negative distance
+        reward = float(-distance_to_goal)
+        
+        return reward
+    
+    # ========================================================================
+    # HELPER METHODS
+    # ========================================================================
+    
+    def _extract_position(self, state_dict):
+        """
+        Extract pipette position from state dictionary.
+        
+        Parameters
+        ----------
         state_dict : dict
-            Dictionary from sim.get_states() or sim.run()
-        robotId : str, optional
-            Robot ID to extract from. If None, uses first robot.
+            Dictionary from sim.reset() or sim.run()
         
-        Returns:
-        --------
-        tuple
-            (position, velocity) as numpy arrays
+        Returns
+        -------
+        position : np.ndarray
+            3D numpy array [x, y, z]
         """
-        if not robotId:
-            robotId = list(sorted(state_dict.keys()))[0]
-        
+        # Get first robot ID
+        robotId = list(sorted(state_dict.keys()))[0]
         robot_state = state_dict.get(robotId, {})
         
-        # Extract position
+        # Extract pipette position
         position = np.array(
-            robot_state.get('pipette_position', [None, None, None]),
+            robot_state.get('pipette_position', [0.0, 0.0, 0.0]),
             dtype=np.float32
         )
         
-        # Extract velocities from joint states
-        if 'joint_states' in robot_state:
-            velocity = np.array(
-                [robot_state['joint_states'][j]['velocity'] 
-                for j in sorted(robot_state['joint_states'].keys())],
-                dtype=np.float32
-            )
-        else:
-            velocity = np.array([None, None, None], dtype=np.float32)
-        
-        return position, velocity
+        return position
+    
+    # ========================================================================
+    # FUTURE EXTENSIONS - Uncomment and modify as needed
+    # ========================================================================
+    
+    # def _extract_velocity(self, state_dict):
+    #     """
+    #     Extract joint velocities from state dictionary.
+    #     USE THIS if you want to add velocities to observation space.
+    #     """
+    #     robotId = list(sorted(state_dict.keys()))[0]
+    #     robot_state = state_dict.get(robotId, {})
+    #     
+    #     if 'joint_states' in robot_state:
+    #         velocity = np.array(
+    #             [robot_state['joint_states'][j]['velocity'] 
+    #              for j in sorted(robot_state['joint_states'].keys())],
+    #             dtype=np.float32
+    #         )
+    #     else:
+    #         velocity = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    #     
+    #     return velocity
+    
+    # def _calculate_velocity_penalty(self, velocity):
+    #     """
+    #     Calculate penalty for excessive velocity (encourages smooth motion).
+    #     USE THIS if you want to add smoothness to reward.
+    #     """
+    #     velocity_magnitude = np.linalg.norm(velocity)
+    #     penalty = 0.01 * velocity_magnitude
+    #     return penalty

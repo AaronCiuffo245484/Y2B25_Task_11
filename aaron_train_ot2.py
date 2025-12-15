@@ -1,5 +1,9 @@
 """
-OT2 RL Training Script with Custom Metrics Logging
+OT2 RL Training Script
+Train PPO agent to control OT-2 robot for precision positioning
+
+Author: Aaron Ciuffo
+Course: ADS-AI Y2B Block B - Task 11
 """
 import gymnasium as gym
 from stable_baselines3 import PPO
@@ -12,14 +16,12 @@ import numpy as np
 # Import your wrapper
 from aaron_ot2_gym_wrapper import OT2Env
 
-
 # ============================================================================
-# CONFIGURATION - UPDATE THESE
+# CONFIGURATION
 # ============================================================================
-PERSON_NAME = "aaron"  # UPDATE WITH YOUR NAME (e.g., "aaron")
-BRANCH_NAME = "aaron"   # UPDATE WITH YOUR BRANCH NAME (e.g., "aaron_branch")
-ENTRYPOINT = "aaron_train_ot2.py"  # UPDATE WITH THIS FILENAME (e.g., "aaron_train_ot2.py")
-
+PERSON_NAME = "aaron"
+BRANCH_NAME = "aaron"
+ENTRYPOINT = "aaron_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
@@ -29,22 +31,32 @@ timestamp = datetime.now().strftime("%y%m%d.%H%M")
 # ============================================================================
 class OT2Callback(BaseCallback):
     """
-    Custom callback for logging OT2-specific metrics:
-    - Episode reward (total reward per episode)
+    Custom callback for logging OT2-specific metrics during training.
+    
+    Logs to TensorBoard (visible in ClearML):
+    - Episode reward (cumulative reward per episode)
     - Episode length (steps to reach goal or timeout)
-    - Success rate (% episodes reaching <1mm precision)
-    - Final distance to goal
+    - Success rate (rolling 100-episode average)
+    - Final distance to goal (mm)
+    
+    Parameters
+    ----------
+    threshold : float
+        Success threshold in meters (default: 0.001m = 1mm)
+    verbose : int
+        Verbosity level
     """
     
     def __init__(self, threshold=0.001, verbose=0):
         super().__init__(verbose)
-        self.threshold = threshold  # Success threshold in meters
+        self.threshold = threshold
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_successes = []
         self.episode_final_distances = []
     
     def _on_step(self) -> bool:
+        """Called after each step in all environments"""
         # Check if any environment finished an episode
         dones = self.locals.get('dones', [])
         
@@ -58,13 +70,13 @@ class OT2Callback(BaseCallback):
                     # Extract metrics from info dict
                     final_dist = info.get('distance_to_goal', float('inf'))
                     
-                    # Episode ended - log metrics
-                    # Note: episode_rewards and episode_lengths are tracked by SB3
+                    # Get episode info (tracked by SB3)
                     ep_info = info.get('episode')
                     if ep_info is not None:
                         ep_reward = ep_info['r']
                         ep_length = ep_info['l']
                         
+                        # Store metrics
                         self.episode_rewards.append(ep_reward)
                         self.episode_lengths.append(ep_length)
                         
@@ -73,13 +85,13 @@ class OT2Callback(BaseCallback):
                         self.episode_successes.append(success)
                         self.episode_final_distances.append(final_dist)
                         
-                        # Log to tensorboard (will show in ClearML)
+                        # Log individual episode metrics
                         self.logger.record('ot2/episode_reward', ep_reward)
                         self.logger.record('ot2/episode_length', ep_length)
-                        self.logger.record('ot2/final_distance_m', final_dist * 1000)  # Convert to mm
+                        self.logger.record('ot2/final_distance_mm', final_dist * 1000)
                         self.logger.record('ot2/success', success)
                         
-                        # Rolling averages over last 100 episodes
+                        # Log rolling averages (last 100 episodes)
                         if len(self.episode_successes) >= 10:
                             window = min(100, len(self.episode_successes))
                             self.logger.record('ot2/success_rate_100ep', 
@@ -101,7 +113,12 @@ class OT2Callback(BaseCallback):
             print(f"Success rate: {100*np.mean(self.episode_successes):.1f}%")
             print(f"Average episode length: {np.mean(self.episode_lengths):.1f} steps")
             print(f"Average final distance: {1000*np.mean(self.episode_final_distances):.3f} mm")
-            print(f"Successful episodes avg length: {np.mean([l for l, s in zip(self.episode_lengths, self.episode_successes) if s]):.1f} steps")
+            
+            # Stats for successful episodes only
+            successful_lengths = [l for l, s in zip(self.episode_lengths, self.episode_successes) if s]
+            if successful_lengths:
+                print(f"Successful episodes avg length: {np.mean(successful_lengths):.1f} steps")
+            
             print("="*60)
 
 
@@ -115,7 +132,7 @@ task = Task.init(
     task_name=task_name,
 )
 
-# Force HTTPS instead of SSH for GitHub
+# Force HTTPS instead of SSH for GitHub (prevents authentication errors)
 task.set_repo(
     repo='https://github.com/AaronCiuffo245484/Y2B25_Task_11.git',
     branch=BRANCH_NAME
