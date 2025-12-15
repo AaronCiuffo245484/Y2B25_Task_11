@@ -1,6 +1,9 @@
 """
-Example OT2 Gym Wrapper
-Simplified version aligned with course documentation
+OT2 Gym Wrapper
+Custom Gymnasium environment for OT-2 robot control
+
+Author: Aaron Ciuffo
+Course: ADS-AI Y2B Block B - Task 11
 """
 import gymnasium as gym
 from gymnasium import spaces
@@ -12,14 +15,23 @@ class OT2Env(gym.Env):
     """
     Custom Gymnasium environment for OT-2 robot control.
     
-    Goal: Train agent to move pipette tip to random target positions.
+    Goal: Train agent to move pipette tip to random target positions within workspace.
     
     Observation Space: 6D [current_x, current_y, current_z, goal_x, goal_y, goal_z]
     Action Space: 3D [x, y, z] normalized to [-1, 1]
-    Reward: Negative distance to goal
+    Reward: Negative distance to goal (baseline - can be modified)
+    
+    Parameters
+    ----------
+    render : bool
+        Whether to render the simulation visually
+    max_steps : int
+        Maximum steps per episode before truncation
+    target_threshold : float
+        Distance threshold (meters) for successful goal achievement
     """
     
-    def __init__(self, render=False, max_steps=1000, target_threshold=0.002):
+    def __init__(self, render=False, max_steps=1000, target_threshold=0.001):
         super(OT2Env, self).__init__()
         
         self.render_mode = render
@@ -44,7 +56,7 @@ class OT2Env(gym.Env):
             dtype=np.float32
         )
         
-        # OT-2 workspace bounds (fixed values for this robot)
+        # OT-2 workspace bounds (fixed values from robot specifications)
         self.workspace_low = np.array([-0.1871, -0.1706, 0.1195], dtype=np.float32)
         self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
         
@@ -54,11 +66,19 @@ class OT2Env(gym.Env):
     
     def reset(self, seed=None):
         """
-        Reset environment to initial state.
+        Reset environment to initial state with new random goal.
         
-        Returns:
-            observation: 6D array [current_pos, goal_pos]
-            info: Empty dict
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed for reproducibility
+        
+        Returns
+        -------
+        observation : np.ndarray
+            6D array [current_pos, goal_pos]
+        info : dict
+            Empty dictionary (for Gymnasium compatibility)
         """
         # Set seed for reproducibility
         if seed is not None:
@@ -76,7 +96,7 @@ class OT2Env(gym.Env):
         # Extract current position
         current_pos = self._extract_position(state_dict)
         
-        # Create observation: [current_x, current_y, current_z, goal_x, goal_y, goal_z]
+        # Create observation
         observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
         
         # Reset step counter
@@ -89,18 +109,25 @@ class OT2Env(gym.Env):
         """
         Execute one step in the environment.
         
-        Args:
-            action: 3D array normalized to [-1, 1]
+        Parameters
+        ----------
+        action : np.ndarray
+            3D array normalized to [-1, 1]
         
-        Returns:
-            observation: 6D array [current_pos, goal_pos]
-            reward: Float reward value
-            terminated: Bool, True if goal reached
-            truncated: Bool, True if max steps reached
-            info: Dict with debugging information
+        Returns
+        -------
+        observation : np.ndarray
+            6D array [current_pos, goal_pos]
+        reward : float
+            Reward value for this step
+        terminated : bool
+            True if goal reached (task success)
+        truncated : bool
+            True if max steps reached (timeout)
+        info : dict
+            Dictionary with debugging information
         """
         # Scale action from [-1, 1] to workspace bounds
-        # Formula: scaled = low + (action + 1) * (high - low) / 2
         scaled_action = self.workspace_low + (action + 1.0) * (self.workspace_high - self.workspace_low) / 2.0
         
         # Append 0 for drop action (not used in this task)
@@ -127,7 +154,7 @@ class OT2Env(gym.Env):
         # Truncated: max steps reached
         truncated = bool(self.steps >= self.max_steps)
         
-        # Info for debugging
+        # Info for debugging and callback logging
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
@@ -146,38 +173,71 @@ class OT2Env(gym.Env):
         """Close the simulation"""
         self.sim.close()
     
+    # ========================================================================
+    # REWARD FUNCTION - MODIFY THIS SECTION FOR EXPERIMENTS
+    # ========================================================================
+    
     def _calculate_reward(self, current_pos, distance_to_goal):
         """
         Calculate reward based on current state.
         
+        BASELINE: Simple negative distance reward
         MODIFY THIS METHOD to experiment with different reward functions.
         
-        Args:
-            current_pos: Current pipette position [x, y, z]
-            distance_to_goal: Euclidean distance to goal
+        Parameters
+        ----------
+        current_pos : np.ndarray
+            Current pipette position [x, y, z]
+        distance_to_goal : float
+            Euclidean distance to goal
         
-        Returns:
-            reward: Float reward value
+        Returns
+        -------
+        reward : float
+            Reward value for this step
         
         Examples of alternative reward functions:
-        - Sparse: return 1.0 if distance < threshold else 0.0
-        - Shaped: return -distance_to_goal - 0.01 * step_penalty
-        - Exponential: return -np.exp(distance_to_goal)
+        --------------------------------------------------------
+        # Sparse reward (only reward at goal)
+        reward = 100.0 if distance_to_goal < self.target_threshold else -0.01
+        
+        # Shaped with goal bonus
+        reward = -distance_to_goal
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0
+        
+        # Quadratic distance penalty + goal bonus + time penalty
+        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0
+        
+        # Exponential shaping
+        reward = -np.exp(distance_to_goal) - 0.01
+        --------------------------------------------------------
         """
-        # Simple negative distance reward
+        # BASELINE: Simple negative distance
         reward = float(-distance_to_goal)
         
         return reward
+    
+    # ========================================================================
+    # HELPER METHODS
+    # ========================================================================
     
     def _extract_position(self, state_dict):
         """
         Extract pipette position from state dictionary.
         
-        Args:
-            state_dict: Dictionary from sim.reset() or sim.run()
+        Parameters
+        ----------
+        state_dict : dict
+            Dictionary from sim.reset() or sim.run()
         
-        Returns:
-            position: 3D numpy array [x, y, z]
+        Returns
+        -------
+        position : np.ndarray
+            3D numpy array [x, y, z]
         """
         # Get first robot ID
         robotId = list(sorted(state_dict.keys()))[0]
@@ -190,3 +250,35 @@ class OT2Env(gym.Env):
         )
         
         return position
+    
+    # ========================================================================
+    # FUTURE EXTENSIONS - Uncomment and modify as needed
+    # ========================================================================
+    
+    # def _extract_velocity(self, state_dict):
+    #     """
+    #     Extract joint velocities from state dictionary.
+    #     USE THIS if you want to add velocities to observation space.
+    #     """
+    #     robotId = list(sorted(state_dict.keys()))[0]
+    #     robot_state = state_dict.get(robotId, {})
+    #     
+    #     if 'joint_states' in robot_state:
+    #         velocity = np.array(
+    #             [robot_state['joint_states'][j]['velocity'] 
+    #              for j in sorted(robot_state['joint_states'].keys())],
+    #             dtype=np.float32
+    #         )
+    #     else:
+    #         velocity = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    #     
+    #     return velocity
+    
+    # def _calculate_velocity_penalty(self, velocity):
+    #     """
+    #     Calculate penalty for excessive velocity (encourages smooth motion).
+    #     USE THIS if you want to add smoothness to reward.
+    #     """
+    #     velocity_magnitude = np.linalg.norm(velocity)
+    #     penalty = 0.01 * velocity_magnitude
+    #     return penalty
