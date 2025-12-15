@@ -35,12 +35,12 @@ task = Task.init(
 
 task.set_base_docker('deanis/2023y2b-rl:latest')
 
-task.set_script(
-    repository='https://github.com/AaronCiuffo245484/Y2B25_Task_11.git',
-    branch=BRANCH_NAME,
-    working_dir='.',
-    entry_point=ENTRYPOINT,
-)
+# task.set_script(
+#     repository='https://github.com/AaronCiuffo245484/Y2B25_Task_11.git',
+#     branch=BRANCH_NAME,
+#     working_dir='.',
+#     entry_point=ENTRYPOINT,
+# )
 
 # Force tensorboard and clearml to install
 task.set_packages(['tensorboard', 'clearml'])
