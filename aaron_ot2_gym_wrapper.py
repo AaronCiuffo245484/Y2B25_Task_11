@@ -204,7 +204,7 @@ class OT2Env(gym.Env):
         # Shaped with goal bonus
         reward = -distance_to_goal
         if distance_to_goal < self.target_threshold:
-            reward += 100.0
+            reward += 100.0 
         
         # Quadratic distance penalty + goal bonus + time penalty
         max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
@@ -217,7 +217,12 @@ class OT2Env(gym.Env):
         --------------------------------------------------------
         """
         # BASELINE: Simple negative distance
-        reward = float(-distance_to_goal)
+        # reward = float(-distance_to_goal)
+
+        # Shaped with goal bonus
+        reward = -distance_to_goal
+        if distance_to_goal < self.target_threshold:
+            reward += 100.0         
         
         return reward
     
