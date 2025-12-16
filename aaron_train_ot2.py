@@ -21,7 +21,8 @@ from aaron_ot2_gym_wrapper import OT2Env
 # ============================================================================
 PERSON_NAME = "aaron"
 BRANCH_NAME = "aaron"
-ENTRYPOINT = "aaron_train_ot2.py"
+# ENTRYPOINT = "aaron_train_ot2.py"
+ENTRYPOINT = "./aaron_ot2_gym_wrapper_curriculum.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
@@ -86,6 +87,13 @@ class OT2Callback(BaseCallback):
                         self.episode_final_distances.append(final_dist)
                         
                         # Log individual episode metrics
+                        # Log curriculum info if available
+                        if hasattr(self.training_env.envs[0], 'get_curriculum_info'):
+                            curriculum_info = self.training_env.envs[0].get_curriculum_info()
+                            self.logger.record('ot2/curriculum_phase', curriculum_info['phase'])
+                            self.logger.record('ot2/curriculum_threshold_mm', curriculum_info['threshold_mm'])
+                            self.logger.record('ot2/curriculum_success_rate', curriculum_info['success_rate'])
+
                         self.logger.record('ot2/episode_reward', ep_reward)
                         self.logger.record('ot2/episode_length', ep_length)
                         self.logger.record('ot2/final_distance_mm', final_dist * 1000)
@@ -179,7 +187,7 @@ print("="*60)
 # ============================================================================
 # Environment Setup
 # ============================================================================
-env = OT2Env(render=False, max_steps=args.max_simulation_steps, target_threshold=args.target_threshold)
+env = OT2Env(render=False, max_steps=args.max_simulation_steps, target_threshold=args.target_threshold, curriculum=True)
 
 # ============================================================================
 # Model Setup
