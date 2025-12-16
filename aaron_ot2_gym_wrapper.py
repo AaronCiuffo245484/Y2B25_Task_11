@@ -226,11 +226,28 @@ class OT2Env(gym.Env):
         
 
         # Quadratic distance penalty + goal bonus + time penalty
+        # max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        # reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+        # if distance_to_goal < self.target_threshold:
+        #     reward += 100.0
+        # return reward
+
+        # Reward with stability bonus for staying near goal
         max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
         reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+        
+        # Large bonus for reaching goal
         if distance_to_goal < self.target_threshold:
             reward += 100.0
-        return reward
+        
+        # Proximity bonus - exponentially increases as you get closer
+        # This rewards "hovering" near the goal
+        elif distance_to_goal < 0.010:  # Within 10mm
+            proximity_bonus = 10.0 * np.exp(-distance_to_goal * 100)
+            reward += proximity_bonus
+        
+        return float(reward)
+
 
     # ========================================================================
     # HELPER METHODS
