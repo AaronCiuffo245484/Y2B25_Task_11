@@ -50,8 +50,8 @@ class OT2Env(gym.Env):
         
         # Define observation space: 6D [pos_x, pos_y, pos_z, goal_x, goal_y, goal_z]
         self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
+            low=-1.0,
+            high=1.0,
             shape=(6,),
             dtype=np.float32
         )
@@ -97,7 +97,11 @@ class OT2Env(gym.Env):
         current_pos = self._extract_position(state_dict)
         
         # Create observation
-        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        # observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        observation = np.concatenate([
+            self._normalize_position(current_pos),
+            self._normalize_position(self.goal_position)
+            ], dtype=np.float32)
         
         # Reset step counter
         self.steps = 0
@@ -127,12 +131,10 @@ class OT2Env(gym.Env):
         info : dict
             Dictionary with debugging information
         """
-        # Scale action from [-1, 1] to workspace bounds
-        scaled_action = self.workspace_low + (action + 1.0) * (self.workspace_high - self.workspace_low) / 2.0
-        
-        # Append 0 for drop action (not used in this task)
-        full_action = [*scaled_action, 0]
-        
+        max_velocity = 2.0  # Match PID controller velocity range
+        velocity = action * max_velocity  # Scale [-1, 1] to [-2, 2] m/s
+        full_action = [*velocity, 0]
+
         # Execute action in simulation
         state_dict = self.sim.run([full_action])
         
@@ -140,7 +142,11 @@ class OT2Env(gym.Env):
         current_pos = self._extract_position(state_dict)
         
         # Create observation
-        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        # observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
+        observation = np.concatenate([
+            self._normalize_position(current_pos),
+            self._normalize_position(self.goal_position)
+        ], dtype=np.float32)        
         
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
@@ -151,6 +157,8 @@ class OT2Env(gym.Env):
         # Terminated: goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
         
+        self.steps += 1
+
         # Truncated: max steps reached
         truncated = bool(self.steps >= self.max_steps)
         
@@ -161,7 +169,6 @@ class OT2Env(gym.Env):
             'goal_position': self.goal_position.tolist()
         }
         
-        self.steps += 1
         
         return observation, reward, terminated, truncated, info
     
@@ -250,7 +257,24 @@ class OT2Env(gym.Env):
         )
         
         return position
-    
+
+    def _normalize_position(self, position):
+        """
+        Normalize position from workspace bounds to [-1, 1].
+        
+        Parameters
+        ----------
+        position : np.ndarray
+            Position in workspace coordinates
+        
+        Returns
+        -------
+        normalized_pos : np.ndarray
+            Position normalized to [-1, 1]
+        """
+        normalized = 2.0 * (position - self.workspace_low) / (self.workspace_high - self.workspace_low) - 1.0
+        return normalized.astype(np.float32)
+
     # ========================================================================
     # FUTURE EXTENSIONS - Uncomment and modify as needed
     # ========================================================================
