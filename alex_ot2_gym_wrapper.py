@@ -105,6 +105,8 @@ class OT2Env(gym.Env):
         
         # Reset step counter
         self.steps = 0
+
+        self.previous_distance = np.linalg.norm(current_pos - self.goal_position)
         
         info = {}
         return observation, info
@@ -186,26 +188,40 @@ class OT2Env(gym.Env):
     
     def _calculate_reward(self, current_pos, distance_to_goal):
         """
-        Reward scaled relative to workspace size.
+        Simplified, stable reward function.
+        
+        Focus: Dense reward based on progress + sparse bonus for success
         """
-        # Maximum possible distance in workspace
-        max_distance = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = 0.0
         
-        # Normalize distance to [0, 1] range
-        normalized_distance = distance_to_goal / max_distance
+        # FIX: Clip distance delta to prevent extreme values
+        distance_delta = self.previous_distance - distance_to_goal
+        distance_delta = np.clip(distance_delta, -0.05, 0.05)  # Limit to 5cm per step
         
-        # Base reward: negative normalized distance
-        reward = -normalized_distance
+        # 1. PRIMARY REWARD: Progress toward goal (normalized)
+        reward += distance_delta * 100.0  # Scale to make meaningful
         
-        # Success bonus
+        # 2. GOAL REACHED: Big sparse reward
         if distance_to_goal < self.target_threshold:
-            reward += 10.0
+            reward += 1000.0  # Make this dominant
+            self.previous_distance = distance_to_goal
+            return float(reward)
         
-        # Proximity bonuses
-        elif distance_to_goal < 0.010:  # Within 10mm
-            reward += 2.0
-        elif distance_to_goal < 0.020:  # Within 20mm
-            reward += 1.0
+        # 3. TIME PENALTY: Encourage efficiency (small)
+        reward -= 0.1
+        
+        # 4. PROXIMITY BONUS: Encourage getting close (scaled by closeness)
+        if distance_to_goal < 0.05:
+            proximity_bonus = (0.05 - distance_to_goal) / 0.05  # 0 to 1
+            reward += proximity_bonus * 5.0
+        
+        # 5. BOUNDARY PENALTY: Hard constraint
+        if np.any(current_pos < self.workspace_low) or \
+        np.any(current_pos > self.workspace_high):
+            reward -= 50.0  # Strong penalty
+        
+        # Update for next step
+        self.previous_distance = distance_to_goal
         
         return float(reward)
     # ========================================================================
