@@ -192,36 +192,19 @@ class OT2Env(gym.Env):
         
         Focus: Dense reward based on progress + sparse bonus for success
         """
-        reward = 0.0
+        # Reward with stability bonus for staying near goal
+        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
         
-        # FIX: Clip distance delta to prevent extreme values
-        distance_delta = self.previous_distance - distance_to_goal
-        distance_delta = np.clip(distance_delta, -0.05, 0.05)  # Limit to 5cm per step
-        
-        # 1. PRIMARY REWARD: Progress toward goal (normalized)
-        reward += distance_delta * 100.0  # Scale to make meaningful
-        
-        # 2. GOAL REACHED: Big sparse reward
+        # Large bonus for reaching goal
         if distance_to_goal < self.target_threshold:
-            reward += 1000.0  # Make this dominant
-            self.previous_distance = distance_to_goal
-            return float(reward)
+            reward += 100.0
         
-        # 3. TIME PENALTY: Encourage efficiency (small)
-        reward -= 0.1
-        
-        # 4. PROXIMITY BONUS: Encourage getting close (scaled by closeness)
-        if distance_to_goal < 0.05:
-            proximity_bonus = (0.05 - distance_to_goal) / 0.05  # 0 to 1
-            reward += proximity_bonus * 5.0
-        
-        # 5. BOUNDARY PENALTY: Hard constraint
-        if np.any(current_pos < self.workspace_low) or \
-        np.any(current_pos > self.workspace_high):
-            reward -= 50.0  # Strong penalty
-        
-        # Update for next step
-        self.previous_distance = distance_to_goal
+        # Proximity bonus - exponentially increases as you get closer
+        # This rewards "hovering" near the goal
+        elif distance_to_goal < 0.010:  # Within 10mm
+            proximity_bonus = 10.0 * np.exp(-distance_to_goal * 100)
+            reward += proximity_bonus
         
         return float(reward)
     # ========================================================================
