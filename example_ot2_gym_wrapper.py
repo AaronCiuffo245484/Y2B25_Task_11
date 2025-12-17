@@ -184,50 +184,74 @@ class OT2Env(gym.Env):
     # REWARD FUNCTION - MODIFY THIS SECTION FOR EXPERIMENTS
     # ========================================================================
     
+    # def _calculate_reward(self, current_pos, distance_to_goal):
+    #     """
+    #     Calculate reward based on current state.
+        
+    #     BASELINE: Simple negative distance reward
+    #     MODIFY THIS METHOD to experiment with different reward functions.
+        
+    #     Parameters
+    #     ----------
+    #     current_pos : np.ndarray
+    #         Current pipette position [x, y, z]
+    #     distance_to_goal : float
+    #         Euclidean distance to goal
+        
+    #     Returns
+    #     -------
+    #     reward : float
+    #         Reward value for this step
+        
+    #     Examples of alternative reward functions:
+    #     --------------------------------------------------------
+    #     # Sparse reward (only reward at goal)
+    #     reward = 100.0 if distance_to_goal < self.target_threshold else -0.01
+        
+    #     # Shaped with goal bonus
+    #     reward = -distance_to_goal
+    #     if distance_to_goal < self.target_threshold:
+    #         reward += 100.0
+        
+    #     # Quadratic distance penalty + goal bonus + time penalty
+    #     max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+    #     reward = -(distance_to_goal / max_dist) ** 2 - 0.01
+    #     if distance_to_goal < self.target_threshold:
+    #         reward += 100.0
+        
+    #     # Exponential shaping
+    #     reward = -np.exp(distance_to_goal) - 0.01
+    #     --------------------------------------------------------
+    #     """
+    #     # BASELINE: Simple negative distance
+    #     reward = float(-distance_to_goal)
+        
+    #     return reward
+    
     def _calculate_reward(self, current_pos, distance_to_goal):
         """
-        Calculate reward based on current state.
-        
-        BASELINE: Simple negative distance reward
-        MODIFY THIS METHOD to experiment with different reward functions.
-        
-        Parameters
-        ----------
-        current_pos : np.ndarray
-            Current pipette position [x, y, z]
-        distance_to_goal : float
-            Euclidean distance to goal
-        
-        Returns
-        -------
-        reward : float
-            Reward value for this step
-        
-        Examples of alternative reward functions:
-        --------------------------------------------------------
-        # Sparse reward (only reward at goal)
-        reward = 100.0 if distance_to_goal < self.target_threshold else -0.01
-        
-        # Shaped with goal bonus
-        reward = -distance_to_goal
-        if distance_to_goal < self.target_threshold:
-            reward += 100.0
-        
-        # Quadratic distance penalty + goal bonus + time penalty
-        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
-        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
-        if distance_to_goal < self.target_threshold:
-            reward += 100.0
-        
-        # Exponential shaping
-        reward = -np.exp(distance_to_goal) - 0.01
-        --------------------------------------------------------
+        Reward scaled relative to workspace size.
         """
-        # BASELINE: Simple negative distance
-        reward = float(-distance_to_goal)
+        # Maximum possible distance in workspace
+        max_distance = np.linalg.norm(self.workspace_high - self.workspace_low)
         
-        return reward
-    
+        # Normalize distance to [0, 1] range
+        normalized_distance = distance_to_goal / max_distance
+        
+        # Base reward: negative normalized distance
+        reward = -normalized_distance
+        
+        # Success bonus
+        if distance_to_goal < self.target_threshold:
+            reward += 10.0
+        
+        # Proximity bonuses
+        elif distance_to_goal < 0.010:  # Within 10mm
+            reward += 2.0
+        elif distance_to_goal < 0.020:  # Within 20mm
+            reward += 1.0
+        
+        return float(reward)
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
