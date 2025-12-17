@@ -20,7 +20,7 @@ from alex_ot2_gym_wrapper import OT2Env
 # CONFIGURATION
 # ============================================================================
 PERSON_NAME = "alex"
-BRANCH_NAME = "alex"
+BRANCH_NAME = "Alex"
 ENTRYPOINT = "alex_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
@@ -149,6 +149,9 @@ parser.add_argument("--learning_rate", type=float, default=0.0003)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--n_steps", type=int, default=2048)
 parser.add_argument("--total_timesteps", type=int, default=1000000)
+parser.add_argument("--gamma", type=float, default=0.99)
+parser.add_argument("--max_steps_truncate", type=int, default=1000)
+parser.add_argument("--target_threshold", type=float, default=0.001)
 args = parser.parse_args()
 
 # Execute remotely AFTER capturing arguments
@@ -177,7 +180,7 @@ print("="*60)
 # ============================================================================
 # Environment Setup
 # ============================================================================
-env = OT2Env(render=False, max_steps=1000, target_threshold=0.001)
+env = OT2Env(render=False, max_steps=args.max_steps_truncate, target_threshold=args.target_threshold)
 
 # ============================================================================
 # Model Setup
@@ -190,6 +193,7 @@ model = PPO(
     n_steps=args.n_steps,
     verbose=1,
     tensorboard_log=f"runs/{PERSON_NAME}",
+    gamma=args.gamma
 )
 
 # ============================================================================
