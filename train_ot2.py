@@ -19,9 +19,9 @@ from example_ot2_gym_wrapper import OT2Env
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PERSON_NAME = "testing"
-BRANCH_NAME = "fix/wrapper"
-ENTRYPOINT = "train_ot2.py"
+PERSON_NAME = "your_name"
+BRANCH_NAME = "your_branch"
+ENTRYPOINT = "your_name_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
