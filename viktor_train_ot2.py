@@ -14,14 +14,14 @@ from datetime import datetime
 import numpy as np
 
 # Import your wrapper
-from aaron_ot2_gym_wrapper import OT2Env
+from viktor_ot2_gym_wrapper import OT2Env
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PERSON_NAME = "aaron"
-BRANCH_NAME = "aaron"
-ENTRYPOINT = "aaron_train_ot2.py"
+PERSON_NAME = "viktor"
+BRANCH_NAME = "viktor-branch"
+ENTRYPOINT = "viktor_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
