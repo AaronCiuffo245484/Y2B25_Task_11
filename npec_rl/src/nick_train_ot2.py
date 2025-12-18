@@ -145,7 +145,7 @@ task.set_packages(['tensorboard', 'clearml'])
 # Command Line Arguments
 # ============================================================================
 parser = argparse.ArgumentParser()
-parser.add_argument("--learning_rate", type=float, default=0.0003)
+parser.add_argument("--learning_rate", type=float, default=0.0001)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--n_steps", type=int, default=2048)
 parser.add_argument("--total_timesteps", type=int, default=100_000)
