@@ -1,0 +1,26 @@
+[project]
+name = "npec-rl"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Nick Belterman 225538",email = "nick.belterman@outlook.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pybullet (>=3.2.7,<4.0.0)",
+    "numpy (>=2.3.5,<3.0.0)",
+    "matplotlib (>=3.10.7,<4.0.0)",
+    "stable-baselines3 (>=2.7.0,<3.0.0)",
+    "gymnasium (>=1.2.2,<2.0.0)",
+    "tensorboard (>=2.20.0,<3.0.0)",
+    "clearml (>=2.0.2,<3.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -19,9 +19,9 @@ from example_ot2_gym_wrapper import OT2Env
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PERSON_NAME = "your_name"
-BRANCH_NAME = "your_branch"
-ENTRYPOINT = "your_name_train_ot2.py"
+PERSON_NAME = "NickBelterman"
+BRANCH_NAME = "batch_size_nick"
+ENTRYPOINT = "nick_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
@@ -148,7 +148,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--learning_rate", type=float, default=0.0003)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--n_steps", type=int, default=2048)
-parser.add_argument("--total_timesteps", type=int, default=1000000)
+parser.add_argument("--total_timesteps", type=int, default=10_000)
 parser.add_argument("--gamma", type=float, default=0.99)
 parser.add_argument("--max_steps_truncate", type=int, default=1000)
 parser.add_argument("--target_threshold", type=float, default=0.001)
