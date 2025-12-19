@@ -27,7 +27,7 @@ param_distribution = [
 
 # 3. Setup the Optimizer
 optimizer = HyperParameterOptimizer(
-    base_task_id='97a21c7280f74b30985f7fe507c2bc63', 
+    base_task_id='aeb472795604444eae90c234f888e37c', 
     hyper_parameters=param_distribution,
     objective_metric_title='ot2',
     objective_metric_series='success_rate_100ep',
