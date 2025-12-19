@@ -53,7 +53,7 @@ param_distribution = [
 
 # 3. Setup the Optimizer
 optimizer = HyperParameterOptimizer(
-    base_task_id='aeb472795604444eae90c234f888e37c', # Change this value to the parent task ID of a previous run of your train script
+    base_task_id='e45b3c1b96884b9c9ec8be2473c55235', # Change this value to the parent task ID of a previous run of your train script
     hyper_parameters=param_distribution,
     objective_metric_title='ot2',
     objective_metric_series='success_rate_100ep',
