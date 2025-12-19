@@ -152,7 +152,13 @@ parser.add_argument("--total_timesteps", type=int, default=100_000)
 parser.add_argument("--gamma", type=float, default=0.99)
 parser.add_argument("--max_steps_truncate", type=int, default=1000)
 parser.add_argument("--target_threshold", type=float, default=0.001)
+parser.add_argument("--ent_coef", type=float, default=0.0)      # Helps exploration
+parser.add_argument("--gae_lambda", type=float, default=0.95)   # Bias/Variance trade-off
+parser.add_argument("--clip_range", type=float, default=0.2)    # Policy update stability
+parser.add_argument("--vf_coef", type=float, default=0.5)       # Value function weight
+parser.add_argument("--n_epochs", type=int, default=10)         # Gradient updates per batch
 args = parser.parse_args()
+
 
 # Execute remotely AFTER capturing arguments
 task.execute_remotely(queue_name='default')
@@ -191,9 +197,14 @@ model = PPO(
     learning_rate=args.learning_rate,
     batch_size=args.batch_size,
     n_steps=args.n_steps,
+    gamma=args.gamma,
+    ent_coef=args.ent_coef,
+    gae_lambda=args.gae_lambda,
+    clip_range=args.clip_range,
+    vf_coef=args.vf_coef,
+    n_epochs=args.n_epochs,
     verbose=1,
-    tensorboard_log=f"runs/{PERSON_NAME}",
-    gamma=args.gamma
+    tensorboard_log=f"runs/{PERSON_NAME}"
 )
 
 # ============================================================================
