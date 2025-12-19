@@ -19,12 +19,36 @@ task = Task.init(
     reuse_last_task_id=False
 )
 
+
 # 2. Define the search space
-# We use DiscreteParameterRange because PPO batch sizes should be powers of 2
-# Define search space here
 param_distribution = [
-    DiscreteParameterRange('Args/batch_size', [128, 256, 512, 1024]), 
-    DiscreteParameterRange('Args/n_steps', [2048]) 
+    # --- Batching & Buffer ---
+    # batch_size must divide n_steps! 
+    # Since n_steps is 2048, these are all valid:
+    DiscreteParameterRange('Args/batch_size', [128, 256, 512, 1024]),
+    DiscreteParameterRange('Args/n_steps', [2048]),
+
+    # --- Learning Rate ---
+    # 3e-4 is standard; 1e-4 is safer/slower; 1e-3 is aggressive
+    # DiscreteParameterRange('Args/learning_rate', [0.0001, 0.0003, 0.0007]),
+
+    # --- Discount Factor (Gamma) ---
+    # How much the agent cares about future rewards. 0.99 is standard.
+    # 0.999 is better for long-horizon tasks (like complex gantry paths).
+    # DiscreteParameterRange('Args/gamma', [0.95, 0.98, 0.99, 0.999]),
+
+    # --- Entropy Coefficient ---
+    # Controls exploration. Higher = more random movement (prevents getting stuck).
+    # Critical for robotics to ensure the agent doesn't just sit still.
+    # DiscreteParameterRange('Args/ent_coef', [0.01, 0.05]),
+
+    # --- GAE Lambda ---
+    # Variance vs Bias trade-off. 0.95 is the gold standard for PPO.
+    # DiscreteParameterRange('Args/gae_lambda', [0.9, 0.95, 1.0]),
+
+    # --- Clip Range ---
+    # How much the policy can change in one update. Lower is more stable.
+    DiscreteParameterRange('Args/clip_range', [0.1, 0.2, 0.3])
 ]
 
 # 3. Setup the Optimizer
