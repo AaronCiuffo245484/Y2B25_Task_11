@@ -14,7 +14,7 @@ from datetime import datetime
 import numpy as np
 
 # Import your wrapper
-from viktor_ot2_gym_wrapper_ot2_gym_wrapper import OT2Env
+from viktor_ot2_gym_wrapper import OT2Env
 
 # ============================================================================
 # CONFIGURATION
