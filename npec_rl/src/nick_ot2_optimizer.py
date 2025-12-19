@@ -25,7 +25,7 @@ param_distribution = [
     # --- Batching & Buffer ---
     # batch_size must divide n_steps! 
     # Since n_steps is 2048, these are all valid:
-    DiscreteParameterRange('Args/batch_size', [128, 256, 512, 1024]),
+    DiscreteParameterRange('Args/batch_size', [256, 512, 1024]),
     DiscreteParameterRange('Args/n_steps', [2048]),
 
     # --- Learning Rate ---
@@ -61,7 +61,7 @@ optimizer = HyperParameterOptimizer(
     optimizer_class=GridSearch,
     execution_queue='default',
     max_number_of_concurrent_tasks=1,
-    total_max_jobs=4 
+    total_max_jobs=9
 )
 
 optimizer.start()
