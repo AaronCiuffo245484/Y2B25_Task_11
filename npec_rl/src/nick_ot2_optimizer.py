@@ -2,6 +2,7 @@ from clearml import Task
 from clearml.automation import HyperParameterOptimizer, DiscreteParameterRange
 from clearml.automation import GridSearch
 from datetime import datetime
+
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
 
@@ -20,14 +21,15 @@ task = Task.init(
 
 # 2. Define the search space
 # We use DiscreteParameterRange because PPO batch sizes should be powers of 2
+# Define search space here
 param_distribution = [
-    DiscreteParameterRange('Args/batch_size', [128, 256, 512, 1024]),
+    DiscreteParameterRange('Args/batch_size', [128, 256, 512, 1024]), 
     DiscreteParameterRange('Args/n_steps', [2048]) 
 ]
 
 # 3. Setup the Optimizer
 optimizer = HyperParameterOptimizer(
-    base_task_id='aeb472795604444eae90c234f888e37c', 
+    base_task_id='aeb472795604444eae90c234f888e37c', # Change this value to the parent task ID of a previous run of your train script
     hyper_parameters=param_distribution,
     objective_metric_title='ot2',
     objective_metric_series='success_rate_100ep',
