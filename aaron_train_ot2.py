@@ -5,13 +5,15 @@ Train PPO agent to control OT-2 robot for precision positioning
 Author: Aaron Ciuffo
 Course: ADS-AI Y2B Block B - Task 11
 """
-import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from clearml import Task
 import argparse
 from datetime import datetime
 import numpy as np
+from pathlib import Path
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import EvalCallback
 
 # Import your wrapper
 from aaron_ot2_gym_wrapper import OT2Env
@@ -145,17 +147,40 @@ task.set_packages(['tensorboard', 'clearml'])
 # Command Line Arguments
 # ============================================================================
 parser = argparse.ArgumentParser()
-parser.add_argument("--learning_rate", type=float, default=0.0003)
-parser.add_argument("--batch_size", type=int, default=64)
-parser.add_argument("--n_steps", type=int, default=2048)
-parser.add_argument("--total_timesteps", type=int, default=1000000)
-parser.add_argument("--gamma", type=float, default=0.99)
-parser.add_argument("--max_steps_truncate", type=int, default=1000)
-parser.add_argument("--target_threshold", type=float, default=0.001)
+
+# PPO hyperparameters (precision-oriented defaults)
+parser.add_argument('--learning_rate', type=float, default=1e-4)
+parser.add_argument('--batch_size', type=int, default=256)
+parser.add_argument('--n_steps', type=int, default=8192)
+parser.add_argument('--gamma', type=float, default=0.99)
+parser.add_argument('--n_epochs', type=int, default=20)
+parser.add_argument('--clip_range', type=float, default=0.15)
+parser.add_argument('--ent_coef', type=float, default=0.0)
+
+# Training control
+parser.add_argument('--total_timesteps', type=int, default=1_000_000)
+
+# Environment
+parser.add_argument('--max_steps_truncate', type=int, default=1000)
+parser.add_argument('--target_threshold', type=float, default=0.001)
+
 args = parser.parse_args()
 
+task.connect(vars(args))
+
+# prevent weirdly sized minibatches
+rollout_size = args.n_steps  # n_envs is 1 in this script
+
+if args.batch_size > rollout_size:
+    raise ValueError(f'batch_size ({args.batch_size}) must be <= n_steps ({args.n_steps})')
+
+if rollout_size % args.batch_size != 0:
+    raise ValueError(f'n_steps ({args.n_steps}) must be divisible by batch_size ({args.batch_size}) for clean PPO minibatches')
+
+
 # Execute remotely AFTER capturing arguments
-task.execute_remotely(queue_name='default')
+if Task.running_locally():
+    task.execute_remotely(queue_name='default')
 
 # ============================================================================
 # Generate Filename
@@ -180,7 +205,9 @@ print("="*60)
 # ============================================================================
 # Environment Setup
 # ============================================================================
-env = OT2Env(render=False, max_steps=args.max_steps_truncate, target_threshold=args.target_threshold)
+env = Monitor(OT2Env(render=False, max_steps=args.max_steps_truncate, target_threshold=args.target_threshold))
+eval_env = Monitor(OT2Env(render=False, max_steps=args.max_steps_truncate, target_threshold=args.target_threshold))
+
 
 # ============================================================================
 # Model Setup
@@ -189,23 +216,32 @@ model = PPO(
     'MlpPolicy',
     env,
     learning_rate=args.learning_rate,
-    batch_size=args.batch_size,
     n_steps=args.n_steps,
+    batch_size=args.batch_size,
+    n_epochs=args.n_epochs,
+    gamma=args.gamma,
+    clip_range=args.clip_range,
+    ent_coef=args.ent_coef,
+    tensorboard_log='runs',
+    tb_log_name=f'PPO_{filename}',
     verbose=1,
-    tensorboard_log=f"runs/{PERSON_NAME}",
-    gamma=args.gamma
 )
 
 # ============================================================================
 # Training with Custom Callback
 # ============================================================================
-ot2_callback = OT2Callback(threshold=0.001, verbose=1)
+ot2_callback = OT2Callback(threshold=args.target_threshold, verbose=1)
 
-model.learn(
-    total_timesteps=args.total_timesteps,
-    callback=ot2_callback,
-    tb_log_name=f"PPO_{filename}"
+eval_callback = EvalCallback(
+    eval_env,
+    best_model_save_path='models/best',
+    log_path='models/eval',
+    eval_freq=10_000,
+    n_eval_episodes=20,
+    deterministic=True,
+    render=False
 )
+model.learn(total_timesteps=args.total_timesteps, callback=[ot2_callback, eval_callback])
 
 # ============================================================================
 # Save and Upload Model
@@ -214,7 +250,7 @@ model_name = f"{filename}.zip"
 model.save(model_name)
 print(f"\nModel saved: {model_name}")
 
-task.upload_artifact("model", artifact_object=model_name)
+task.upload_artifact("model", artifact_object=Path(model_name).resolve())
 print(f"Artifact uploaded: {model_name}")
 
 print("\nTraining complete!")

@@ -17,7 +17,7 @@ class OT2Env(gym.Env):
     
     Goal: Train agent to move pipette tip to random target positions within workspace.
     
-    Observation Space: 6D [current_x, current_y, current_z, goal_x, goal_y, goal_z]
+    Observation Space: 9D [current_x, current_y, current_z, goal_x, goal_y, goal_z, vel_j0, vel_j1, vel_j2]
     Action Space: 3D [x, y, z] normalized to [-1, 1]
     Reward: Negative distance to goal (baseline - can be modified)
     
@@ -37,6 +37,7 @@ class OT2Env(gym.Env):
         self.render_mode = render
         self.max_steps = max_steps
         self.target_threshold = target_threshold
+        self.max_velocity = 2.0        
         
         # Create simulation
         self.sim = Simulation(num_agents=1, render=render)
@@ -48,11 +49,11 @@ class OT2Env(gym.Env):
             dtype=np.float32
         )
         
-        # Define observation space: 6D [pos_x, pos_y, pos_z, goal_x, goal_y, goal_z]
+        # Define observation space: 9D [pos_x, pos_y, pos_z, goal_x, goal_y, goal_z, vel_0, vel_1, vel_2]
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(6,),
+            shape=(9,),
             dtype=np.float32
         )
         
@@ -75,19 +76,17 @@ class OT2Env(gym.Env):
         
         Returns
         -------
-        observation : np.ndarray
-            6D array [current_pos, goal_pos]
+        observation : np.ndarray shape (9, )
+            9D array [current_pos, goal_pos]
         info : dict
             Empty dictionary (for Gymnasium compatibility)
         """
-        # Set seed for reproducibility
-        if seed is not None:
-            np.random.seed(seed)
-        
-        # Generate random goal within workspace
-        self.goal_position = np.random.uniform(
-            self.workspace_low,
-            self.workspace_high
+        super().reset(seed=seed)
+
+        # Generate random goal within workspace using Gymnasium RNG
+        self.goal_position = self.np_random.uniform(
+            low=self.workspace_low,
+            high=self.workspace_high
         ).astype(np.float32)
         
         # Reset simulation
@@ -97,12 +96,16 @@ class OT2Env(gym.Env):
         current_pos = self._extract_position(state_dict)
         
         # Create observation
-        # observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
-        observation = np.concatenate([
-            self._normalize_position(current_pos),
-            self._normalize_position(self.goal_position)
-            ], dtype=np.float32)
-        
+        current_vel = self._extract_velocity(state_dict)
+
+        observation = np.concatenate(
+            [
+                np.clip(self._normalize_position(current_pos), -1.0, 1.0),
+                np.clip(self._normalize_position(self.goal_position), -1.0, 1.0),
+                np.clip(self._normalize_velocity(current_vel), -1.0, 1.0),
+            ]
+        ).astype(np.float32)
+
         # Reset step counter
         self.steps = 0
         
@@ -121,7 +124,7 @@ class OT2Env(gym.Env):
         Returns
         -------
         observation : np.ndarray
-            6D array [current_pos, goal_pos]
+            9D array [current_pos, goal_pos, joint_vel]
         reward : float
             Reward value for this step
         terminated : bool
@@ -131,8 +134,7 @@ class OT2Env(gym.Env):
         info : dict
             Dictionary with debugging information
         """
-        max_velocity = 2.0  # Match PID controller velocity range
-        velocity = action * max_velocity  # Scale [-1, 1] to [-2, 2] m/s
+        velocity = action * self.max_velocity  # Scale [-1, 1] to [-2, 2] joint vel
         full_action = [*velocity, 0]
 
         # Execute action in simulation
@@ -142,20 +144,24 @@ class OT2Env(gym.Env):
         current_pos = self._extract_position(state_dict)
         
         # Create observation
-        # observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
-        observation = np.concatenate([
-            self._normalize_position(current_pos),
-            self._normalize_position(self.goal_position)
-        ], dtype=np.float32)        
+        current_vel = self._extract_velocity(state_dict)
+
+        observation = np.concatenate(
+            [
+                np.clip(self._normalize_position(current_pos), -1.0, 1.0),
+                np.clip(self._normalize_position(self.goal_position), -1.0, 1.0),
+                np.clip(self._normalize_velocity(current_vel), -1.0, 1.0),
+            ]
+        ).astype(np.float32)
         
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
         # Calculate reward
-        reward = self._calculate_reward(current_pos, distance_to_goal)
-        
+        reward = self._calculate_reward(current_pos, distance_to_goal, action)
+                        
         # Terminated: goal reached
-        terminated = bool(distance_to_goal < self.target_threshold)
+        terminated = distance_to_goal < 0.001
         
         self.steps += 1
 
@@ -184,30 +190,28 @@ class OT2Env(gym.Env):
     # REWARD FUNCTION - MODIFY THIS SECTION FOR EXPERIMENTS
     # ========================================================================
     
-    def _calculate_reward(self, current_pos, distance_to_goal):
+    def _calculate_reward(self, current_pos, distance_to_goal, action):
         """
-        Reward scaled relative to workspace size.
+        Wrapper-only reward shaping for high precision.
+        distance_to_goal is in meters.
         """
-        # Maximum possible distance in workspace
-        max_distance = np.linalg.norm(self.workspace_high - self.workspace_low)
-        
-        # Normalize distance to [0, 1] range
-        normalized_distance = distance_to_goal / max_distance
-        
-        # Base reward: negative normalized distance
-        reward = -normalized_distance
-        
-        # Success bonus
-        if distance_to_goal < self.target_threshold:
-            reward += 10.0
-        
-        # Proximity bonuses
-        elif distance_to_goal < 0.010:  # Within 10mm
-            reward += 2.0
-        elif distance_to_goal < 0.020:  # Within 20mm
-            reward += 1.0
-        
+        dist_mm = distance_to_goal * 1000.0
+
+        # Dense term in millimeters
+        reward = -dist_mm
+
+        # Smooth near-goal shaping: continuous, strong inside last few mm
+        reward += float(2.0 * np.exp(-dist_mm / 2.0))
+
+        # Small action penalty to reduce jitter
+        reward -= 0.001 * float(np.sum(np.square(action)))
+
+        # Success bonus for <1mm
+        if distance_to_goal < 0.001:
+            reward += 50.0
+
         return float(reward)
+
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
@@ -254,6 +258,28 @@ class OT2Env(gym.Env):
         """
         normalized = 2.0 * (position - self.workspace_low) / (self.workspace_high - self.workspace_low) - 1.0
         return normalized.astype(np.float32)
+
+    def _extract_velocity(self, state_dict):
+        """
+        Extract joint velocities (joints 0,1,2) from state dictionary.
+        """
+        robotId = list(sorted(state_dict.keys()))[0]
+        robot_state = state_dict.get(robotId, {})
+
+        joint_states = robot_state.get('joint_states', {})
+        vels = []
+        for j in (0, 1, 2):
+            js = joint_states.get(j, {})
+            vels.append(js.get('velocity', 0.0))
+
+        return np.array(vels, dtype=np.float32)
+
+    def _normalize_velocity(self, velocity):
+        """
+        Normalize joint velocity to [-1, 1] using self.max_velocity.
+        """
+        v = np.asarray(velocity, dtype=np.float32)
+        return (v / np.float32(self.max_velocity)).astype(np.float32)
 
     # ========================================================================
     # FUTURE EXTENSIONS - Uncomment and modify as needed
