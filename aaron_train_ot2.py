@@ -5,13 +5,11 @@ Train PPO agent to control OT-2 robot for precision positioning
 Author: Aaron Ciuffo
 Course: ADS-AI Y2B Block B - Task 11
 """
+import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
 from clearml import Task
 import argparse
 from datetime import datetime
-import numpy as np
-from pathlib import Path
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 
@@ -27,102 +25,6 @@ ENTRYPOINT = "aaron_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
-
-# ============================================================================
-# Custom Callback for OT2-Specific Metrics
-# ============================================================================
-class OT2Callback(BaseCallback):
-    """
-    Custom callback for logging OT2-specific metrics during training.
-    
-    Logs to TensorBoard (visible in ClearML):
-    - Episode reward (cumulative reward per episode)
-    - Episode length (steps to reach goal or timeout)
-    - Success rate (rolling 100-episode average)
-    - Final distance to goal (mm)
-    
-    Parameters
-    ----------
-    threshold : float
-        Success threshold in meters (default: 0.001m = 1mm)
-    verbose : int
-        Verbosity level
-    """
-    
-    def __init__(self, threshold=0.001, verbose=0):
-        super().__init__(verbose)
-        self.threshold = threshold
-        self.episode_rewards = []
-        self.episode_lengths = []
-        self.episode_successes = []
-        self.episode_final_distances = []
-    
-    def _on_step(self) -> bool:
-        """Called after each step in all environments"""
-        # Check if any environment finished an episode
-        dones = self.locals.get('dones', [])
-        
-        for i, done in enumerate(dones):
-            if done:
-                # Get info for this environment
-                infos = self.locals.get('infos', [])
-                if i < len(infos):
-                    info = infos[i]
-                    
-                    # Extract metrics from info dict
-                    final_dist = info.get('distance_to_goal', float('inf'))
-                    
-                    # Get episode info (tracked by SB3)
-                    ep_info = info.get('episode')
-                    if ep_info is not None:
-                        ep_reward = ep_info['r']
-                        ep_length = ep_info['l']
-                        
-                        # Store metrics
-                        self.episode_rewards.append(ep_reward)
-                        self.episode_lengths.append(ep_length)
-                        
-                        # Success if final distance < threshold
-                        success = float(final_dist < self.threshold)
-                        self.episode_successes.append(success)
-                        self.episode_final_distances.append(final_dist)
-                        
-                        # Log individual episode metrics
-                        self.logger.record('ot2/episode_reward', ep_reward)
-                        self.logger.record('ot2/episode_length', ep_length)
-                        self.logger.record('ot2/final_distance_mm', final_dist * 1000)
-                        self.logger.record('ot2/success', success)
-                        
-                        # Log rolling averages (last 100 episodes)
-                        if len(self.episode_successes) >= 10:
-                            window = min(100, len(self.episode_successes))
-                            self.logger.record('ot2/success_rate_100ep', 
-                                             np.mean(self.episode_successes[-window:]))
-                            self.logger.record('ot2/avg_length_100ep', 
-                                             np.mean(self.episode_lengths[-window:]))
-                            self.logger.record('ot2/avg_final_dist_mm_100ep', 
-                                             np.mean(self.episode_final_distances[-window:]) * 1000)
-        
-        return True
-    
-    def _on_training_end(self) -> None:
-        """Print summary statistics at end of training"""
-        if len(self.episode_successes) > 0:
-            print("\n" + "="*60)
-            print("TRAINING SUMMARY")
-            print("="*60)
-            print(f"Total episodes: {len(self.episode_successes)}")
-            print(f"Success rate: {100*np.mean(self.episode_successes):.1f}%")
-            print(f"Average episode length: {np.mean(self.episode_lengths):.1f} steps")
-            print(f"Average final distance: {1000*np.mean(self.episode_final_distances):.3f} mm")
-            
-            # Stats for successful episodes only
-            successful_lengths = [l for l, s in zip(self.episode_lengths, self.episode_successes) if s]
-            if successful_lengths:
-                print(f"Successful episodes avg length: {np.mean(successful_lengths):.1f} steps")
-            
-            print("="*60)
-
 
 # ============================================================================
 # ClearML Setup
@@ -141,8 +43,6 @@ task.set_repo(
 )
 
 task.set_base_docker('deanis/2023y2b-rl:latest')
-task.set_packages(['tensorboard', 'clearml'])
-
 # ============================================================================
 # Command Line Arguments
 # ============================================================================
@@ -223,14 +123,12 @@ model = PPO(
     clip_range=args.clip_range,
     ent_coef=args.ent_coef,
     tensorboard_log='runs',
-    tb_log_name=f'PPO_{filename}',
     verbose=1,
 )
 
 # ============================================================================
 # Training with Custom Callback
 # ============================================================================
-ot2_callback = OT2Callback(threshold=args.target_threshold, verbose=1)
 
 eval_callback = EvalCallback(
     eval_env,
@@ -241,7 +139,11 @@ eval_callback = EvalCallback(
     deterministic=True,
     render=False
 )
-model.learn(total_timesteps=args.total_timesteps, callback=[ot2_callback, eval_callback])
+model.learn(
+    total_timesteps=args.total_timesteps,
+    callback=eval_callback,
+    tb_log_name=f'PPO_{filename}',
+)
 
 # ============================================================================
 # Save and Upload Model
