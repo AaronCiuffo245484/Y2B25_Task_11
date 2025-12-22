@@ -1,10 +1,3 @@
-"""
-OT2 Gym Wrapper - Simplified for Fast Convergence
-Custom Gymnasium environment for OT-2 robot control
-
-Author: Aaron Ciuffo
-Course: ADS-AI Y2B Block B - Task 11
-"""
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np

@@ -1,10 +1,3 @@
-"""
-OT2 RL Training Script - Simplified Version
-Train PPO agent to control OT-2 robot for precision positioning
-
-Author: Aaron Ciuffo
-Course: ADS-AI Y2B Block B - Task 11
-"""
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
@@ -19,8 +12,8 @@ from aaron_ot2_wrapper import OT2Env
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PERSON_NAME = "aaron"
-BRANCH_NAME = "dead_simple"  # Change this to your branch name
+PERSON_NAME = "yourname"
+BRANCH_NAME = "your_branchname"  # Change this to your branch name
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
