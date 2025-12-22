@@ -153,69 +153,34 @@ class OT2Env(gym.Env):
         
         return observation, reward, terminated, truncated, info
     
-    # def _calculate_reward(self, distance_to_goal):
-    #     """
-    #     SIMPLIFIED REWARD FUNCTION
-        
-    #     Goal: Encourage fast, decisive movement to target.
-        
-    #     Components:
-    #     1. Time penalty: -0.1 per step (punish slow movement)
-    #     2. Distance penalty: -10 * distance (punish being far from goal)
-    #     3. Success bonus: +50 (big reward for reaching goal)
-        
-    #     Examples:
-    #     - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
-    #     - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
-    #     - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
-    #     """
-    #     # Time penalty - punish every step
-    #     time_penalty = -0.1
-        
-    #     # Distance penalty - punish being far from goal
-    #     distance_penalty = -10.0 * distance_to_goal
-        
-    #     # Success bonus
-    #     success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
-        
-    #     reward = time_penalty + distance_penalty + success_bonus
-        
-    #     return float(reward)
     def _calculate_reward(self, distance_to_goal):
         """
-        Calculate reward using tanh kernel for position tracking.
+        SIMPLIFIED REWARD FUNCTION
         
-        Based on Isaac Lab's reaching task reward implementation.
-        Source: NVIDIA Isaac Lab Documentation
-        https://docs.nvidia.com/learning/physical-ai/getting-started-with-isaac-lab/latest/
-        train-your-second-robot-with-isaac-lab/06-custom-reward-functions-and-hyperparameters.html
-        
-        The tanh kernel provides stronger gradients when close to goal compared to
-        linear distance penalties. This accelerates convergence for precision tasks.
+        Goal: Encourage fast, decisive movement to target.
         
         Components:
-        1. Time penalty: -0.1 per step (encourage fast movement)
-        2. Distance reward: tanh-based scaling (stronger gradients near goal)
-        3. Success bonus: +50 when within threshold
+        1. Time penalty: -0.1 per step (punish slow movement)
+        2. Distance penalty: -10 * distance (punish being far from goal)
+        3. Success bonus: +50 (big reward for reaching goal)
         
-        Args:
-            distance_to_goal: Euclidean distance to target in meters
-        
-        Returns:
-            float: Total reward for current step
+        Examples:
+        - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
+        - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
+        - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
+        # Time penalty - punish every step
         time_penalty = -0.1
         
-        # Tanh kernel - characteristic distance of 10mm
-        # Returns ~1.0 when at goal, ~0.0 when far away
-        std = 0.01
-        distance_reward = 1.0 - np.tanh(distance_to_goal / std)
-        distance_reward *= 10.0  # Scale to match other reward components
+        # Distance penalty - punish being far from goal
+        distance_penalty = -10.0 * distance_to_goal
         
         # Success bonus
         success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
         
-        return float(time_penalty + distance_reward + success_bonus)
+        reward = time_penalty + distance_penalty + success_bonus
+        
+        return float(reward)
     
     def render(self, mode='human'):
         """Render is handled by simulation if render=True in __init__"""
