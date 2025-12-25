@@ -1,104 +1,51 @@
-"""
-OT2 Gym Wrapper - SPARSE WITH SHAPED PENALTY REWARD
-Level 2: Binary success with nonlinear guidance
-"""
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from sim_class import Simulation
 
-
 class OT2Env(gym.Env):
-    """OT2 Environment with Sparse + Shaped Penalty Reward"""
-
-    def __init__(self, render=False, max_steps=500, target_threshold=0.015):
+    def __init__(self, render=False, max_steps=300, target_threshold=0.005):
         super(OT2Env, self).__init__()
-        
-        self.render_mode = render
+        self.sim = Simulation(num_agents=1, render=render)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32)
+        self.workspace_low = np.array([-0.1871, -0.1706, 0.1700], dtype=np.float32)
+        self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
         self.max_steps = max_steps
         self.target_threshold = target_threshold
-        
-        self.sim = Simulation(num_agents=1, render=render)
-        
-        self.action_space = spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0], dtype=np.float32),
-            high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
-            dtype=np.float32
-        )
-        
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32
-        )
-        
-        self.workspace_low = np.array([-0.1871, -0.1706, 0.1195], dtype=np.float32)
-        self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
-        
-        self.steps = 0
-        self.goal_position = None
-        
-        print("=" * 70)
-        print("REWARD ALGORITHM: SPARSE + SHAPED PENALTY (Level 2)")
-        print("=" * 70)
+
+    def _normalize_position(self, pos):
+        return 2.0 * (pos - self.workspace_low) / (self.workspace_high - self.workspace_low) - 1.0
 
     def reset(self, seed=None):
-        if seed is not None:
-            np.random.seed(seed)
-        
-        self.goal_position = np.random.uniform(
-            self.workspace_low, self.workspace_high
-        ).astype(np.float32)
-        
+        if seed is not None: np.random.seed(seed)
+        self.goal_position = np.random.uniform(self.workspace_low, self.workspace_high).astype(np.float32)
         state_dict = self.sim.reset(num_agents=1)
-        current_pos = self._extract_position(state_dict)
-        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
-        
+        robotId = list(sorted(state_dict.keys()))[0]
+        current_pos = np.array(state_dict[robotId].get('pipette_position'), dtype=np.float32)
         self.steps = 0
-        return observation, {}
+        obs = np.concatenate([self._normalize_position(current_pos), self._normalize_position(self.goal_position)])
+        return obs, {}
 
     def step(self, action):
-        scaled_action = self.workspace_low + (action + 1.0) * (self.workspace_high - self.workspace_low) / 2.0
-        full_action = [*scaled_action, 0]
-        
-        state_dict = self.sim.run([full_action])
-        current_pos = self._extract_position(state_dict)
-        observation = np.concatenate([current_pos, self.goal_position], dtype=np.float32)
-        
-        distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
-        
-        reward = self._calculate_reward(current_pos, distance_to_goal)
-        
-        terminated = bool(distance_to_goal < self.target_threshold)
-        truncated = bool(self.steps >= self.max_steps)
-        
-        info = {
-            'distance_to_goal': float(distance_to_goal),
-            'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist()
-        }
-        
-        self.steps += 1
-        return observation, reward, terminated, truncated, info
-
-    def _calculate_reward(self, current_pos, distance_to_goal):
-        if distance_to_goal < self.target_threshold:
-            return 200.0  # Success must be significantly larger than penalties
-
-        # Linear shaping is more stable for PPO than quadratic
-        # Scale it so the max penalty is around -20, not -8000
-        reward = -distance_to_goal * 50
-        return float(reward)
-
-    def _extract_position(self, state_dict):
+        velocity = np.asarray(action, dtype=np.float32) * 2.0 
+        state_dict = self.sim.run([[float(velocity[0]), float(velocity[1]), float(velocity[2]), 0.0]])
         robotId = list(sorted(state_dict.keys()))[0]
-        robot_state = state_dict.get(robotId, {})
-        position = np.array(
-            robot_state.get('pipette_position', [0.0, 0.0, 0.0]),
-            dtype=np.float32
-        )
-        return position
+        current_pos = np.array(state_dict[robotId].get('pipette_position'), dtype=np.float32)
+        dist = np.linalg.norm(current_pos - self.goal_position)
+        
+        # SPARSE REWARD LOGIC
+        if dist < self.target_threshold:
+            reward = 100.0
+        elif dist < 0.015: # 15mm soft success
+            reward = 0.5 
+        else:
+            reward = -0.05
 
-    def render(self, mode='human'):
-        pass
+        self.steps += 1
+        terminated = bool(dist < self.target_threshold)
+        truncated = bool(self.steps >= self.max_steps)
+        obs = np.concatenate([self._normalize_position(current_pos), self._normalize_position(self.goal_position)])
+        return obs, float(reward), terminated, truncated, {"distance_mm": dist * 1000}
 
-    def close(self):
-        self.sim.close()
+    def close(self): self.sim.close()
