@@ -1,108 +1,16 @@
-"""
-OT2 RL Training Script - Simplified Version
-Train PPO agent to control OT-2 robot for precision positioning
-
-Author: Aaron Ciuffo
-Course: ADS-AI Y2B Block B - Task 11
-"""
-import gymnasium as gym
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
-from clearml import Task
 import argparse
 from datetime import datetime
 import numpy as np
-
-# Import wrapper
-from filipp_ot2_gym_wrapper import OT2Env
+from clearml import Task
 
 # ============================================================================
-# CONFIGURATION
+# CONFIGURATION - UPDATE THESE
 # ============================================================================
-PERSON_NAME = "filipp"
-BRANCH_NAME = "Filipp"  # Change this to your branch name
+PERSON_NAME = "filipp"  # Update to your name
+BRANCH_NAME = "Filipp"    # Update to your branch name
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
-
-# ============================================================================
-# Custom Callback for OT2 Metrics
-# ============================================================================
-class OT2Callback(BaseCallback):
-    """
-    Callback for logging OT2-specific metrics during training.
-    """
-
-    def __init__(self, threshold=0.005, verbose=0):
-        super().__init__(verbose)
-        self.threshold = threshold
-        self.episode_rewards = []
-        self.episode_lengths = []
-        self.episode_successes = []
-        self.episode_final_distances = []
-
-    def _on_step(self) -> bool:
-        """Called after each step in all environments"""
-        dones = self.locals.get('dones', [])
-
-        for i, done in enumerate(dones):
-            if done:
-                infos = self.locals.get('infos', [])
-                if i < len(infos):
-                    info = infos[i]
-
-                    # Extract metrics
-                    final_dist = info.get('distance_to_goal', float('inf'))
-
-                    # Get episode info from SB3
-                    ep_info = info.get('episode')
-                    if ep_info is not None:
-                        ep_reward = ep_info['r']
-                        ep_length = ep_info['l']
-
-                        # Store metrics
-                        self.episode_rewards.append(ep_reward)
-                        self.episode_lengths.append(ep_length)
-
-                        success = float(final_dist < self.threshold)
-                        self.episode_successes.append(success)
-                        self.episode_final_distances.append(final_dist)
-
-                        # Log to tensorboard
-                        self.logger.record('ot2/episode_reward', ep_reward)
-                        self.logger.record('ot2/episode_length', ep_length)
-                        self.logger.record('ot2/final_distance_mm', final_dist * 1000)
-                        self.logger.record('ot2/success', success)
-
-                        # Rolling averages
-                        if len(self.episode_successes) >= 10:
-                            window = min(100, len(self.episode_successes))
-                            self.logger.record('ot2/success_rate_100ep',
-                                             np.mean(self.episode_successes[-window:]))
-                            self.logger.record('ot2/avg_length_100ep',
-                                             np.mean(self.episode_lengths[-window:]))
-                            self.logger.record('ot2/avg_final_dist_mm_100ep',
-                                             np.mean(self.episode_final_distances[-window:]) * 1000)
-
-        return True
-
-    def _on_training_end(self) -> None:
-        """Print summary at end of training"""
-        if len(self.episode_successes) > 0:
-            print("\n" + "="*60)
-            print("TRAINING SUMMARY")
-            print("="*60)
-            print(f"Total episodes: {len(self.episode_successes)}")
-            print(f"Success rate: {100*np.mean(self.episode_successes):.1f}%")
-            print(f"Average episode length: {np.mean(self.episode_lengths):.1f} steps")
-            print(f"Average final distance: {1000*np.mean(self.episode_final_distances):.3f} mm")
-
-            successful_lengths = [l for l, s in zip(self.episode_lengths, self.episode_successes) if s]
-            if successful_lengths:
-                print(f"Successful episodes avg length: {np.mean(successful_lengths):.1f} steps")
-
-            print("="*60)
-
 
 # ============================================================================
 # ClearML Setup
@@ -110,7 +18,7 @@ class OT2Callback(BaseCallback):
 task_name = f'OT2_RL_{PERSON_NAME}_{timestamp}'
 
 task = Task.init(
-    project_name='Mentor Group - Jason/Group 1',
+    project_name='Mentor Group - Jason/Group 1', 
     task_name=task_name,
 )
 
@@ -135,11 +43,107 @@ parser.add_argument("--total_timesteps", type=int, default=500000)
 parser.add_argument("--gamma", type=float, default=0.99)
 parser.add_argument("--max_steps_truncate", type=int, default=300)
 parser.add_argument("--target_threshold", type=float, default=0.005)
+parser.add_argument("--reward_type", type=str, default='current',  # ADD THIS
+                    choices=['current', 'simple', 'step_penalty', 'squared',
+                            'sparse', 'hybrid', 'progressive', 'exponential',
+                            'normalized_quadratic'],
+                    help='Reward function type to use')
 args = parser.parse_args()
 
 # Execute remotely
 task.execute_remotely(queue_name='default')
 
+# ============================================================================
+# ML IMPORTS (AFTER execute_remotely)
+# ============================================================================
+import gymnasium as gym
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
+
+# Import wrapper
+from filipp_ot2_gym_wrapper import OT2Env  # Update to match your wrapper filename
+
+# ============================================================================
+# Custom Callback for OT2 Metrics
+# ============================================================================
+class OT2Callback(BaseCallback):
+    """
+    Callback for logging OT2-specific metrics during training.
+    """
+    
+    def __init__(self, threshold=0.005, verbose=0):
+        super().__init__(verbose)
+        self.threshold = threshold
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.episode_successes = []
+        self.episode_final_distances = []
+    
+    def _on_step(self) -> bool:
+        """Called after each step in all environments"""
+        dones = self.locals.get('dones', [])
+        
+        for i, done in enumerate(dones):
+            if done:
+                infos = self.locals.get('infos', [])
+                if i < len(infos):
+                    info = infos[i]
+                    
+                    # Extract metrics
+                    final_dist = info.get('distance_to_goal', float('inf'))
+                    
+                    # Get episode info from SB3
+                    ep_info = info.get('episode')
+                    if ep_info is not None:
+                        ep_reward = ep_info['r']
+                        ep_length = ep_info['l']
+                        
+                        # Store metrics
+                        self.episode_rewards.append(ep_reward)
+                        self.episode_lengths.append(ep_length)
+                        
+                        success = float(final_dist < self.threshold)
+                        self.episode_successes.append(success)
+                        self.episode_final_distances.append(final_dist)
+                        
+                        # Log to tensorboard
+                        self.logger.record('ot2/episode_reward', ep_reward)
+                        self.logger.record('ot2/episode_length', ep_length)
+                        self.logger.record('ot2/final_distance_mm', final_dist * 1000)
+                        self.logger.record('ot2/success', success)
+                        
+                        # Rolling averages
+                        if len(self.episode_successes) >= 10:
+                            window = min(100, len(self.episode_successes))
+                            self.logger.record('ot2/success_rate_100ep', 
+                                             np.mean(self.episode_successes[-window:]))
+                            self.logger.record('ot2/avg_length_100ep', 
+                                             np.mean(self.episode_lengths[-window:]))
+                            self.logger.record('ot2/avg_final_dist_mm_100ep', 
+                                             np.mean(self.episode_final_distances[-window:]) * 1000)
+        
+        return True
+    
+    def _on_training_end(self) -> None:
+        """Print summary at end of training"""
+        if len(self.episode_successes) > 0:
+            print("\n" + "="*60)
+            print("TRAINING SUMMARY")
+            print("="*60)
+            print(f"Total episodes: {len(self.episode_successes)}")
+            print(f"Success rate: {100*np.mean(self.episode_successes):.1f}%")
+            print(f"Average episode length: {np.mean(self.episode_lengths):.1f} steps")
+            print(f"Average final distance: {1000*np.mean(self.episode_final_distances):.3f} mm")
+            
+            successful_lengths = [l for l, s in zip(self.episode_lengths, self.episode_successes) if s]
+            if successful_lengths:
+                print(f"Successful episodes avg length: {np.mean(successful_lengths):.1f} steps")
+            
+            print("="*60)
+
+# ============================================================================
+# Generate Filename
+# ============================================================================
 # ============================================================================
 # Generate Filename
 # ============================================================================
@@ -148,7 +152,7 @@ def format_lr(lr):
     return f"{lr:.0e}".replace("+", "").replace("-0", "-")
 
 lr_str = format_lr(args.learning_rate)
-filename = f"{timestamp}_{PERSON_NAME}_lr{lr_str}_b{args.batch_size}_s{args.n_steps}_th{int(args.target_threshold*1000)}mm"
+filename = f"{timestamp}_{PERSON_NAME}_lr{lr_str}_b{args.batch_size}_s{args.n_steps}_reward{args.reward_type}"  # UPDATED
 
 print("="*60)
 print(f"Training Configuration:")
@@ -166,9 +170,10 @@ print("="*60)
 # Environment Setup
 # ============================================================================
 env = OT2Env(
-    render=False,
-    max_steps=args.max_steps_truncate,
-    target_threshold=args.target_threshold
+    render=False, 
+    max_steps=args.max_steps_truncate, 
+    target_threshold=args.target_threshold,
+    reward_type=args.reward_type  # ADD THIS LINE
 )
 
 # ============================================================================
