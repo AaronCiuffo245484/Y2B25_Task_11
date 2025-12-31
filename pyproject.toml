@@ -1,0 +1,14 @@
+[project]
+name = "practice"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "clearml>=2.0.2",
+    "gymnasium>=1.2.3",
+    "numpy>=2.4.0",
+    "pybullet>=3.2.7",
+    "shimmy>=2.0.0",
+    "stable-baselines3>=2.7.1",
+]
