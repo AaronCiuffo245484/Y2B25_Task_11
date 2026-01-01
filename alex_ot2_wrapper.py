@@ -64,7 +64,6 @@ class OT2Env(gym.Env):
         self.steps = 0
         self.goal_position = None
         self.initial_distance = None
-        self.prev_distance = None  # ADD THIS LINE
     
     def reset(self, seed=None):
         """Reset environment to initial state with new random goal."""
@@ -85,7 +84,6 @@ class OT2Env(gym.Env):
         
         # Store initial distance for reward scaling
         self.initial_distance = float(np.linalg.norm(current_pos - self.goal_position))
-        self.prev_distance = self.initial_distance  # ADD THIS LINE
         
         # Create normalized observation
         observation = np.concatenate([
@@ -124,11 +122,8 @@ class OT2Env(gym.Env):
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # Calculate reward with prev_distance and action
-        reward = self._calculate_reward(distance_to_goal, self.prev_distance, action)  # CHANGED THIS LINE
-        
-        # Update prev_distance for next step
-        self.prev_distance = distance_to_goal  # ADD THIS LINE
+        # Calculate reward
+        reward = self._calculate_reward(distance_to_goal)
         
         # Check if goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
