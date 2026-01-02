@@ -7,7 +7,7 @@ import numpy as np
 from ot2_env_fixed import OT2Env
 
 PERSON_NAME = "filipp"
-BRANCH_NAME = "Filipp_normalized_progress"
+BRANCH_NAME = "Filipp"
 REWARD_TYPE = "normalized_progress"
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
 
