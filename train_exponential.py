@@ -4,7 +4,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from clearml import Task
 from datetime import datetime
 import numpy as np
-from filipp_ot2_wrapper import OT2Env
+from ot2_env_fixed import OT2Env
 
 PERSON_NAME = "filipp"
 BRANCH_NAME = "Filipp"
