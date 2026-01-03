@@ -27,7 +27,7 @@ class OT2Callback(BaseCallback):
     Callback for logging OT2-specific metrics during training.
     """
     
-    def __init__(self, threshold=0.005, verbose=0):
+    def __init__(self, threshold=0.001, verbose=0):
         super().__init__(verbose)
         self.threshold = threshold
         self.episode_rewards = []
@@ -131,7 +131,7 @@ parser.add_argument("--max_steps_truncate", type=int, default=1000)
 parser.add_argument("--target_threshold", type=float, default=0.001)
 parser.add_argument("--ent_coef", type=float, default=0.0)      # Helps exploration
 parser.add_argument("--gae_lambda", type=float, default=0.95)   # Bias/Variance trade-off
-parser.add_argument("--clip_range", type=float, default=0.2)    # Policy update stability
+parser.add_argument("--clip_range", type=float, default=0.3)    # Policy update stability
 parser.add_argument("--vf_coef", type=float, default=0.5)       # Value function weight
 parser.add_argument("--n_epochs", type=int, default=10)         # Gradient updates per batch
 args = parser.parse_args()
