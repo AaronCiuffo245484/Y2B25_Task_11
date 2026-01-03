@@ -18,6 +18,7 @@ ENTRYPOINT = "nick_train_ot2.py"
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
+print(f"Timestamp: {timestamp}")
 
 # ============================================================================
 # Custom Callback for OT2 Metrics
