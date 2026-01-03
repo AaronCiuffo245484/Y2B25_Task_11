@@ -24,7 +24,7 @@ class OT2Env(gym.Env):
         Distance threshold (meters) for successful goal achievement (default: 0.005 = 5mm)
     """
     
-    def __init__(self, render=False, max_steps=300, target_threshold=0.001):
+    def __init__(self, render=False, max_steps=1000, target_threshold=0.001):
         super(OT2Env, self).__init__()
         
         self.render_mode = render
