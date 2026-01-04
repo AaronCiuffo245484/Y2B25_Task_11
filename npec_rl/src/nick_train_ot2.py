@@ -167,7 +167,7 @@ print("="*60)
 # Environment Setup
 # ============================================================================
 env = OT2Env(
-    render=False, 
+    # render=False, 
     max_steps=args.max_steps_truncate, 
     target_threshold=args.target_threshold
 )
