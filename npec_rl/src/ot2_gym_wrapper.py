@@ -31,13 +31,13 @@ class OT2Env(gym.Env):
         - Close
     """
 
-    def __init__(self, render_=False, max_steps=1000, num_agents=1):
+    def __init__(self, render=False, max_steps=1000, target_threshold=0.001, num_agents=1):
         super(OT2Env, self).__init__()
 
         # Initialize environment parameters
-        self.render_ = render_
+        self.render = render
         self.max_steps = max_steps
-        self.sim = Simulation(num_agents=num_agents, render=render_)
+        self.sim = Simulation(num_agents=num_agents, render=render)
 
         # Define action and observation spaces
         self.action_space = spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
@@ -119,9 +119,9 @@ class OT2Env(gym.Env):
         self.prev_position = observation[:3]
         return observation, reward, terminated, truncated, info
 
-    def render(self, render_mode="human"):
+    def render(self, rendermode="human"):
         # super(OT2Env, self).render()
-        if self.render_:
+        if self.render:
             p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
 
     # def get_reward(self):
