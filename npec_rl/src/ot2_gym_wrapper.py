@@ -1,5 +1,3 @@
-import time
-
 import gymnasium as gym
 import numpy as np
 import pybullet as p
@@ -7,9 +5,10 @@ from gymnasium import spaces
 from sim_class import Simulation
 
 # Working envolope
-x_min, x_max = -0.260, 0.134
-y_min, y_max = -0.260, 0.130
-z_min, z_max = 0.030, 0.200
+X_MIN, X_MAX = -0.260, 0.134
+Y_MIN, Y_MAX = -0.260, 0.130
+Z_MIN, Z_MAX = 0.030, 0.200
+
 import os
 print(os.getcwd())
 class OT2Env(gym.Env):
@@ -38,10 +37,11 @@ class OT2Env(gym.Env):
         self.render = render
         self.max_steps = max_steps
         self.sim = Simulation(num_agents=num_agents, render=render)
+        self.target_threshold = target_threshold
 
         # Define action and observation spaces
         self.action_space = spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
 
         # Initialize step counter
         self.steps = 0
@@ -51,7 +51,7 @@ class OT2Env(gym.Env):
         self.sim.set_start_position(0.0, 0.0, 0.15)
         # Reset the simulation environment
         observation = self.sim.reset()
-        # print(f"ot2_gym_wrapper:self.sim.reset():{observation}")
+        print(f"ot2_gym_wrapper:self.sim.reset():{observation}")
 
         # Extract robot ID from the observation
         robotId = list(observation.keys())[0]
@@ -59,19 +59,21 @@ class OT2Env(gym.Env):
 
         # Set a random goal position for the episode
         np.random.seed(seed)
-        self.goal_position = np.random.uniform(low=(x_max, y_min, z_min), high=(x_max, y_max, z_max))
+        self.goal_position = self._normalize_position(np.random.uniform(low=(X_MAX, Y_MIN, Z_MIN), high=(X_MAX, Y_MAX, Z_MAX)))
         # print(f"ot2_gym_wrapper:self.goal_position:{self.goal_position}")
 
         # Get the initial pipette position
-        self.pipette_position = self.sim.pipette_positions[robotId]
+        pipette_position = self.sim.pipette_positions[robotId]
         # print(f"ot2_gym_wrapper:self.pipette_position:{self.pipette_position}")
 
         # Concatenate pipette and goal positions for the observation
-        observation = np.concatenate([self.pipette_position, self.goal_position]).astype(np.float32)
+        observation = np.concatenate([
+            self._normalize_position(pipette_position),
+            self.goal_position
+        ], dtype=np.float32)
         self.steps = 0
-        info = {}
         self.prev_position = observation[:3]
-        return (observation, info)
+        return observation, {}
 
     def get_goal_position(self) -> tuple[float, float, float]:
         return self.goal_position
@@ -91,33 +93,47 @@ class OT2Env(gym.Env):
 
         # Extract robot ID from the observation
         robotId = list(observation.keys())[0]
+        robot_state = observation.get(robotId, {})
+        self.pipette_position = np.array(
+            self._normalize_position(robot_state.get('pipette_position', [0.0, 0.0, 0.0])),
+            dtype=np.float32
+        )
+       
 
+    
         # Concatenate pipette and goal positions for the observation
-        observation = np.concatenate([observation[robotId]["pipette_position"], self.goal_position]).astype(np.float32)
+        observation = np.concatenate([
+            self.pipette_position,
+            self.goal_position
+        ], dtype=np.float32)
 
-        # Calculate the negative Euclidean distance between the pipette and goal positions as the reward
-        reward = self.calculate_reward()
+        
+        # Calculate the Euclidean distance between current and goal positions
+        distance_to_goal = np.linalg.norm(self.pipette_position - self.goal_position)
+        reward = self.calculate_reward(distance_to_goal)
 
         # if action[3] == 1:
         #     penalty = 0.1 * np.linalg.norm(self.pipette_position - self.goal_position)
         #     reward += penalty
 
+
         # Check if the task is completed (distance below a threshold)
-        task_completed = np.linalg.norm(self.pipette_position - self.goal_position) < 0.01
+        task_completed = distance_to_goal < self.target_threshold
 
         # Check if the episode should be truncated
         truncated = self.steps >= self.max_steps
 
-        # Check if the episode is terminated (either task completed or truncated)
-        terminated = task_completed or truncated
-
         # Additional info
-        info = {}
+        info = {
+            'distance_to_goal': float(distance_to_goal),
+            'current_position': self.pipette_position.tolist(),
+            'goal_position': self.goal_position.tolist()
+        }
 
         # Increment the number of steps
         self.steps += 1
         self.prev_position = observation[:3]
-        return observation, reward, terminated, truncated, info
+        return observation, reward, task_completed, truncated, info
 
     def render(self, rendermode="human"):
         # super(OT2Env, self).render()
@@ -139,10 +155,9 @@ class OT2Env(gym.Env):
 
     #     return total_reward
 
-    def calculate_reward(self):
+    def calculate_reward(self, distance_to_goal=None):
         distance_factor = 10
-        # Calculate the Euclidean distance between current and goal positions
-        distance_to_goal = np.linalg.norm(self.pipette_position - self.goal_position)
+
         # logging.warning(f'ot2_gym_wrapper:calculate_reward:distance_to_goal:{distance_to_goal}')
         prev_distance_to_goal = np.linalg.norm(self.prev_position - self.goal_position)
         # logging.info(f'ot2_gym_wrapper:calculate_reward:prev_distance_to_goal:{prev_distance_to_goal}')
@@ -164,6 +179,14 @@ class OT2Env(gym.Env):
         # Close the simulation environment
         self.sim.close()
 
+    def _normalize_position(self, position):
+        """Normalize position from workspace bounds to [-1, 1]."""
+        if not isinstance(position, np.ndarray):
+            position = np.array(position, dtype=np.float32)
+        WORKSPACE_LOW  = np.array([X_MIN, Y_MIN, Z_MIN], dtype=np.float32)
+        WORKSPACE_HIGH = np.array([X_MAX, Y_MAX, Z_MAX], dtype=np.float32)
+        normalized = 2.0 * (position - WORKSPACE_LOW) / (WORKSPACE_HIGH - WORKSPACE_LOW) - 1.0
+        return normalized.astype(np.float32)
 
-if __name__ == "__main":
+if __name__ == "__main__":
     pass
