@@ -59,7 +59,7 @@ class OT2Env(gym.Env):
 
         # Set a random goal position for the episode
         np.random.seed(seed)
-        self.goal_position = self._normalize_position(np.random.uniform(low=(X_MAX, Y_MIN, Z_MIN), high=(X_MAX, Y_MAX, Z_MAX)))
+        self.goal_position = np.random.uniform(low=(X_MAX, Y_MIN, Z_MIN), high=(X_MAX, Y_MAX, Z_MAX))
         # print(f"ot2_gym_wrapper:self.goal_position:{self.goal_position}")
 
         # Get the initial pipette position
@@ -69,7 +69,7 @@ class OT2Env(gym.Env):
         # Concatenate pipette and goal positions for the observation
         observation = np.concatenate([
             self._normalize_position(pipette_position),
-            self.goal_position
+            self._normalize_position(self.goal_position)
         ], dtype=np.float32)
         self.steps = 0
         self.prev_position = observation[:3]
@@ -95,7 +95,7 @@ class OT2Env(gym.Env):
         robotId = list(observation.keys())[0]
         robot_state = observation.get(robotId, {})
         self.pipette_position = np.array(
-            self._normalize_position(robot_state.get('pipette_position', [0.0, 0.0, 0.0])),
+            robot_state.get('pipette_position', [0.0, 0.0, 0.0]),
             dtype=np.float32
         )
        
@@ -103,8 +103,8 @@ class OT2Env(gym.Env):
     
         # Concatenate pipette and goal positions for the observation
         observation = np.concatenate([
-            self.pipette_position,
-            self.goal_position
+            self._normalize_position(self.pipette_position),
+            self._normalize_position(self.goal_position)
         ], dtype=np.float32)
 
         
