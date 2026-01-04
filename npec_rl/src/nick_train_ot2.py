@@ -126,7 +126,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--learning_rate", type=float, default=0.0003)
 parser.add_argument("--batch_size", type=int, default=256)
 parser.add_argument("--n_steps", type=int, default=2048)
-parser.add_argument("--total_timesteps", type=int, default=100_000)
+parser.add_argument("--total_timesteps", type=int, default=1000)
 parser.add_argument("--gamma", type=float, default=0.99)
 parser.add_argument("--max_steps_truncate", type=int, default=1000)
 parser.add_argument("--target_threshold", type=float, default=0.001)
@@ -167,7 +167,7 @@ print("="*60)
 # Environment Setup
 # ============================================================================
 env = OT2Env(
-    # render=False, 
+    render=False, 
     max_steps=args.max_steps_truncate, 
     target_threshold=args.target_threshold
 )
