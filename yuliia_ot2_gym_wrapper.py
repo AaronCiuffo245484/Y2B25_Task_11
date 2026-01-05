@@ -188,24 +188,19 @@ class OT2Env(gym.Env):
         """
         Reward scaled relative to workspace size.
         """
-        # Maximum possible distance in workspace
-        max_distance = np.linalg.norm(self.workspace_high - self.workspace_low)
+        # Reward with stability bonus for staying near goal
+        max_dist = np.linalg.norm(self.workspace_high - self.workspace_low)
+        reward = -(distance_to_goal / max_dist) ** 2 - 0.01
         
-        # Normalize distance to [0, 1] range
-        normalized_distance = distance_to_goal / max_distance
-        
-        # Base reward: negative normalized distance
-        reward = -normalized_distance
-        
-        # Success bonus
+        # Large bonus for reaching goal
         if distance_to_goal < self.target_threshold:
-            reward += 10.0
+            reward += 100.0
         
-        # Proximity bonuses
+        # Proximity bonus - exponentially increases as you get closer
+        # This rewards "hovering" near the goal
         elif distance_to_goal < 0.010:  # Within 10mm
-            reward += 2.0
-        elif distance_to_goal < 0.020:  # Within 20mm
-            reward += 1.0
+            proximity_bonus = 10.0 * np.exp(-distance_to_goal * 100)
+            reward += proximity_bonus
         
         return float(reward)
     # ========================================================================
