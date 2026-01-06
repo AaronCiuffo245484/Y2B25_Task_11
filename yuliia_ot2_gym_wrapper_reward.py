@@ -141,44 +141,46 @@ class OT2Env(gym.Env):
 
     def _calculate_reward(self, distance_to_goal, velocity_magnitude):
         """
-        More aggressive reward shaping to strongly push for sub-1mm precision.
+        Reward function designed to overcome "freezing at 2mm" problem.
+        
+        Key idea: Make each level of precision increasingly valuable,
+        so robot is motivated to push from 2mm → 1mm → 0.5mm
         """
         
-        # ========== EXPONENTIAL DISTANCE REWARDS ==========
-        # Rewards grow exponentially as you get closer
-        # This creates VERY strong motivation to improve precision
+        # ========== DISTANCE REWARDS (Progressive) ==========
+        # Each milestone gives a BONUS, not just reduces penalty
         
-        if distance_to_goal < 0.0005:  # 0.5mm
-            distance_reward = 200.0
-        elif distance_to_goal < 0.001:  # 1mm
-            distance_reward = 120.0
-        elif distance_to_goal < 0.0015:  # 1.5mm
-            distance_reward = 80.0
-        elif distance_to_goal < 0.002:  # 2mm - current stuck point
-            distance_reward = 40.0
-        elif distance_to_goal < 0.003:  # 3mm
-            distance_reward = 20.0
-        elif distance_to_goal < 0.005:  # 5mm
+        if distance_to_goal < 0.0005:  # 0.5mm - exceptional!
+            distance_reward = 150.0
+        elif distance_to_goal < 0.001:  # 1mm - success threshold
+            distance_reward = 100.0
+        elif distance_to_goal < 0.002:  # 2mm - good progress
+            distance_reward = 60.0
+        elif distance_to_goal < 0.005:  # 5mm - on track
+            distance_reward = 30.0
+        elif distance_to_goal < 0.010:  # 10mm - getting closer
             distance_reward = 10.0
-        elif distance_to_goal < 0.010:  # 10mm
-            distance_reward = 0.0
-        else:  # Far away - penalty
-            distance_reward = -10.0 * distance_to_goal
+        else:  # Still far - linear penalty
+            distance_reward = -5.0 * distance_to_goal
         
-        # ========== MINIMAL TIME PENALTY ==========
-        # Almost no time pressure - precision is all that matters
-        time_penalty = -0.01
+        # ========== TIME PENALTY (Reduced) ==========
+        # Robot needs time for precision, so we reduce this
+        time_penalty = -0.02  # Reduced from -0.1 to -0.02
         
-        # ========== VELOCITY PENALTY WHEN CLOSE ==========
+        # ========== VELOCITY COMPONENT (Gentle) ==========
+        # Only start caring about velocity when very close
         velocity_penalty = 0.0
-        if distance_to_goal < 0.003:  # Within 3mm
-            velocity_penalty = -10.0 * velocity_magnitude
+        if distance_to_goal < 0.002:  # Within 2mm
+            # Gentle penalty: encourages slowing down but doesn't dominate
+            velocity_penalty = -5.0 * velocity_magnitude
         
-        # ========== BIG SUCCESS BONUS ==========
+        # ========== SUCCESS BONUS ==========
+        # Extra reward for actually reaching goal
         success_bonus = 0.0
         if distance_to_goal < self.target_threshold:
-            success_bonus = 300.0
+            success_bonus = 200.0
         
+        # Combine all components
         total_reward = distance_reward + time_penalty + velocity_penalty + success_bonus
         
         return float(total_reward)
