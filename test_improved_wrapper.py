@@ -1,69 +1,87 @@
 """
-Test the improved wrapper with random actions.
-Verify new reward and termination logic work correctly.
+Test settling behavior with controlled movements.
+Manually move robot to target to verify settling detection.
 """
 
 import numpy as np
 from yuliia_ot2_gym_wrapper_reward import OT2Env
 
-def test_improved_wrapper():
-    print("="*60)
-    print("Testing IMPROVED Wrapper")
+def test_settling_detection():
+    print("\n" + "="*60)
+    print("Testing Settling Detection")
     print("="*60)
     
-    # Create environment with improved wrapper
     env = OT2Env(render=False, max_steps=300, target_threshold=0.001)
-    
-    print("\n1. Testing initialization...")
-    print(f"   Settling steps required: {env.required_settle_steps}")
-    print(f"   Target threshold: {env.target_threshold*1000}mm")
-    print("   ✓ Initialized")
-    
-    print("\n2. Testing reset...")
     obs, info = env.reset()
-    print(f"   Steps within threshold: {env.steps_within_threshold}")
-    print(f"   Distance history length: {len(env.distance_history)}")
-    print("   ✓ Reset works")
     
-    print("\n3. Testing step with random actions...")
-    total_reward = 0
-    settling_detected = False
+    print(f"\nGoal position: {env.goal_position}")
     
+    # Get current position
+    state = env.sim.get_states()
+    robot_id = list(state.keys())[0]
+    current_pos = np.array(state[robot_id]["pipette_position"])
+    print(f"Start position: {current_pos}")
+    
+    # Calculate direction to goal
+    direction = env.goal_position - current_pos
+    distance = np.linalg.norm(direction)
+    print(f"Initial distance: {distance*1000:.2f}mm")
+    
+    print("\n--- Phase 1: Fast approach ---")
+    # Move fast toward goal
     for step in range(100):
-        action = env.action_space.sample()
+        direction = env.goal_position - current_pos
+        distance = np.linalg.norm(direction)
+        
+        if distance < 0.010:  # Within 10mm, slow down
+            break
+        
+        # Fast movement: action = 0.5 (scaled to 1.0 m/s)
+        action = direction / np.linalg.norm(direction) * 0.5
+        action = np.clip(action, -1, 1)
+        
         obs, reward, terminated, truncated, info = env.step(action)
         
-        total_reward += reward
+        state = env.sim.get_states()
+        robot_id = list(state.keys())[0]
+        current_pos = np.array(state[robot_id]["pipette_position"])
         
-        # Check if settling logic triggered
-        if env.steps_within_threshold > 0:
-            settling_detected = True
-            print(f"   Step {step}: Settling... ({env.steps_within_threshold}/{env.required_settle_steps})")
+        if step % 10 == 0:
+            print(f"  Step {step}: distance={distance*1000:.2f}mm, reward={reward:.2f}")
+    
+    print(f"\n--- Phase 2: Precise settling ---")
+    print("Now moving slowly to trigger settling...")
+    
+    # Move slowly toward goal to trigger settling
+    for step in range(100, 200):
+        direction = env.goal_position - current_pos
+        distance = np.linalg.norm(direction)
+        
+        # Very slow movement: action = 0.05 (scaled to 0.1 m/s)
+        action = direction / np.linalg.norm(direction) * 0.05
+        action = np.clip(action, -1, 1)
+        
+        obs, reward, terminated, truncated, info = env.step(action)
+        
+        state = env.sim.get_states()
+        robot_id = list(state.keys())[0]
+        current_pos = np.array(state[robot_id]["pipette_position"])
+        
+        print(f"  Step {step}: distance={distance*1000:.3f}mm, "
+              f"settling={env.steps_within_threshold}/{env.required_settle_steps}, "
+              f"reward={reward:.2f}")
         
         if terminated:
-            print(f"   ✓ Episode terminated (settled!) at step {step}")
-            print(f"     Final distance: {info['distance_to_goal']*1000:.3f}mm")
-            print(f"     Total reward: {total_reward:.2f}")
+            print(f"\n✓ SUCCESS: Settled at step {step}!")
+            print(f"  Final distance: {distance*1000:.3f}mm")
             break
         
         if truncated:
-            print(f"   ✗ Episode truncated at step {step}")
-            print(f"     Final distance: {info['distance_to_goal']*1000:.3f}mm")
+            print(f"\n✗ TIMEOUT at step {step}")
             break
     
-    if settling_detected:
-        print("\n   ✓ Settling logic activated (robot got close with low velocity)")
-    else:
-        print("\n   ⚠ Settling logic never activated (expected with random actions)")
-    
-    print("\n4. Checking tracking arrays...")
-    print(f"   Distance history length: {len(env.distance_history)}")
-    print(f"   Velocity history length: {len(env.velocity_history)}")
-    print("   ✓ History tracking works")
-    
     env.close()
-    print("\n✓ All tests passed!")
     print("="*60)
 
 if __name__ == "__main__":
-    test_improved_wrapper()
+    test_settling_detection()

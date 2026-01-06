@@ -5,25 +5,31 @@ from sim_class import Simulation
 
 
 class OT2Env(gym.Env):
-    
+    """
+    Custom Gym environment for OT-2 robot pipette positioning task.
+    This wrapper converts the PyBullet simulation into a standard RL environment
+    that can be used with Stable-Baselines3 and other RL libraries.
+    """
+
     def __init__(self, render=False, max_steps=300, target_threshold=0.001):
         super(OT2Env, self).__init__()
         
+        # Store configuration parameters for use throughout the environment
         self.render_mode = render
         self.max_steps = max_steps
         self.target_threshold = target_threshold
         
-        # Create simulation
+        # Creating the PyBullet simulation instance with one robot
         self.sim = Simulation(num_agents=1, render=render)
         
-        # Define action space: normalized [-1, 1] for RL algorithms
+        # Defining action space: normalized [-1, 1] for RL algorithms
         self.action_space = spaces.Box(
             low=np.array([-1.0, -1.0, -1.0], dtype=np.float32),
             high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32
         )
         
-        # Define observation space: 6D normalized positions
+        # Defining observation space: 6D normalized positions. All positions are normalized to [-1, 1] range for better RL training.
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
@@ -31,7 +37,7 @@ class OT2Env(gym.Env):
             dtype=np.float32
         )
         
-        # OT-2 workspace bounds (verified from simulation)
+        # OT-2 workspace physical boundaries in meters.
         self.workspace_low = np.array([-0.1871, -0.1706, 0.1700], dtype=np.float32)
         self.workspace_high = np.array([0.2532, 0.2197, 0.2897], dtype=np.float32)
         
@@ -39,12 +45,7 @@ class OT2Env(gym.Env):
         self.steps = 0
         self.goal_position = None
         self.initial_distance = None
-        
-        # NEW: Settling behavior tracking
-        self.steps_within_threshold = 0  # How many consecutive steps we've been settled
-        self.required_settle_steps = 5   # Must stay settled for this many steps
-        self.distance_history = []       # Track distances over episode
-        self.velocity_history = []       # Track velocities over episode
+
 
 
     def reset(self, seed=None):
@@ -52,22 +53,20 @@ class OT2Env(gym.Env):
         if seed is not None:
             np.random.seed(seed)
         
-        # Generate random goal within workspace
+        # Generating random goal within workspace. This ensures the agent learns to reach any valid position, not just one target.
         self.goal_position = np.random.uniform(
             self.workspace_low,
             self.workspace_high
         ).astype(np.float32)
         
-        # Reset simulation
+        # Reseting simulation and extracting current position of the pipette.
         state_dict = self.sim.reset(num_agents=1)
-        
-        # Extract current position
         current_pos = self._extract_position(state_dict)
         
-        # Store initial distance for reward scaling
+        # Calculating and storing initial distance for potential reward scaling.
         self.initial_distance = float(np.linalg.norm(current_pos - self.goal_position))
         
-        # Create normalized observation
+        # Building the observation by concatenating normalized current and goal positions. Normalization ensures all values are in [-1, 1] which helps RL training stability.
         observation = np.concatenate([
             self._normalize_position(current_pos),
             self._normalize_position(self.goal_position)
@@ -76,131 +75,112 @@ class OT2Env(gym.Env):
         # Reset step counter
         self.steps = 0
         
-        # NEW: Reset settling tracking
-        self.steps_within_threshold = 0
-        self.distance_history = []
-        self.velocity_history = []
-        
-        # Verify observation shape and dtype
+        # Verifying observation shape and dtype. These assertions catch bugs early if something goes wrong.
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
         assert observation.dtype == np.float32, f"Observation dtype is {observation.dtype}, expected float32"
         
         return observation, {}
 
 
+
     def step(self, action):
         """Execute one step in the environment."""
-        # Ensure action is float32
+        # Converting action to float32 array for consistency.
         action = np.asarray(action, dtype=np.float32)
         
-        # Scale action to velocity range
+        # Scaling normalized action [-1, 1] to actual velocity commands [-2, 2] m/s.
         max_velocity = 2.0
         velocity = action * max_velocity
         
-        # NEW: Calculate velocity magnitude for reward and termination
-        velocity_magnitude = np.linalg.norm(velocity)
-        
-        # Create full action array with gripper command (0)
-        # Convert to list for sim.run() compatibility
+        # Creating full action array with gripper command (0). Converting to list because sim.run() expects this format.
         full_action = [float(velocity[0]), float(velocity[1]), float(velocity[2]), 0.0]
 
-        # Execute action in simulation
+        # Execute the velocity command in the PyBullet simulation for one timestep.
         state_dict = self.sim.run([full_action])
         
-        # Extract current position
+        # Extracting current position.
         current_pos = self._extract_position(state_dict)
         
-        # Calculate distance to goal
+        # Calculating Euclidean distance from current position to goal.
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # NEW: Track history for analysis
-        self.distance_history.append(distance_to_goal)
-        self.velocity_history.append(velocity_magnitude)
+        # Calculating reward based on current distance.
+        reward = self._calculate_reward(distance_to_goal)
         
-        # NEW: Calculate reward with velocity information
-        reward = self._calculate_reward(distance_to_goal, velocity_magnitude)
+        # Checking if goal reached.
+        terminated = bool(distance_to_goal < self.target_threshold)
         
-        # NEW: Improved termination - require settling
-        # Check if we're close AND moving slowly
-        if distance_to_goal < self.target_threshold and velocity_magnitude < 0.04:
-            self.steps_within_threshold += 1
-        else:
-            self.steps_within_threshold = 0  # Reset if we leave threshold or speed up
-        
-        # Success = stayed within threshold for required number of steps
-        terminated = bool(self.steps_within_threshold >= self.required_settle_steps)
-        
-        # Increment step counter
+        # Increment step counter to track episode progress.
         self.steps += 1
         
-        # Check if max steps reached
+        # Checking if max steps reached. If max steps reached without success, episode ends as timeout.
         truncated = bool(self.steps >= self.max_steps)
         
-        # Create observation
+        # Building new observation with updated current position and same goal
         observation = np.concatenate([
             self._normalize_position(current_pos),
             self._normalize_position(self.goal_position)
         ], dtype=np.float32)
         
-        # Verify observation shape and dtype
+        # Verifying observation shape and dtype
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
         assert observation.dtype == np.float32, f"Observation dtype is {observation.dtype}, expected float32"
         
-        # Info for logging
+        # Create info dictionary with extra data for logging and debugging
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist(),
-            'velocity_magnitude': float(velocity_magnitude),  # NEW: add velocity info
-            'steps_settled': int(self.steps_within_threshold)  # NEW: add settling info
+            'goal_position': self.goal_position.tolist()
         }
         
         return observation, reward, terminated, truncated, info
 
 
+
     def _calculate_reward(self, distance_to_goal, velocity_magnitude):
         """
-        IMPROVED REWARD FUNCTION
-        
-        Encourages settling behavior by:
-        1. Progressive distance rewards (not binary)
-        2. Penalizing high velocity when close
-        3. Big bonus for settling (close + slow)
-        4. Reduced time penalty
+        More aggressive reward shaping to strongly push for sub-1mm precision.
         """
         
-        # ========== DISTANCE COMPONENT ==========
-        # Progressive rewards - better precision = better reward
-        if distance_to_goal < 0.001:  # Within 1mm - excellent!
-            distance_reward = 100.0
-        elif distance_to_goal < 0.002:  # Within 2mm - very good
-            distance_reward = 50.0
-        elif distance_to_goal < 0.005:  # Within 5mm - good
+        # ========== EXPONENTIAL DISTANCE REWARDS ==========
+        # Rewards grow exponentially as you get closer
+        # This creates VERY strong motivation to improve precision
+        
+        if distance_to_goal < 0.0005:  # 0.5mm
+            distance_reward = 200.0
+        elif distance_to_goal < 0.001:  # 1mm
+            distance_reward = 120.0
+        elif distance_to_goal < 0.0015:  # 1.5mm
+            distance_reward = 80.0
+        elif distance_to_goal < 0.002:  # 2mm - current stuck point
+            distance_reward = 40.0
+        elif distance_to_goal < 0.003:  # 3mm
             distance_reward = 20.0
-        else:  # Still far - linear penalty
+        elif distance_to_goal < 0.005:  # 5mm
+            distance_reward = 10.0
+        elif distance_to_goal < 0.010:  # 10mm
+            distance_reward = 0.0
+        else:  # Far away - penalty
             distance_reward = -10.0 * distance_to_goal
         
-        # ========== VELOCITY COMPONENT ==========
-        # When close to goal, penalize high velocity
+        # ========== MINIMAL TIME PENALTY ==========
+        # Almost no time pressure - precision is all that matters
+        time_penalty = -0.01
+        
+        # ========== VELOCITY PENALTY WHEN CLOSE ==========
         velocity_penalty = 0.0
-        if distance_to_goal < 0.005:  # Only when close
-            # Quadratic penalty: moving fast is really bad when close
-            velocity_penalty = -50.0 * (velocity_magnitude ** 2)
+        if distance_to_goal < 0.003:  # Within 3mm
+            velocity_penalty = -10.0 * velocity_magnitude
         
-        # ========== TIME COMPONENT ==========
-        # Small time penalty - reduced from -0.1 to allow precision
-        time_penalty = -0.05
+        # ========== BIG SUCCESS BONUS ==========
+        success_bonus = 0.0
+        if distance_to_goal < self.target_threshold:
+            success_bonus = 300.0
         
-        # ========== SETTLING BONUS ==========
-        # Huge bonus for being close AND slow (the goal behavior!)
-        settling_bonus = 0.0
-        if distance_to_goal < self.target_threshold and velocity_magnitude < 0.04:
-            settling_bonus = 200.0
+        total_reward = distance_reward + time_penalty + velocity_penalty + success_bonus
         
-        # Combine all components
-        reward = distance_reward + velocity_penalty + time_penalty + settling_bonus
-        
-        return float(reward)
+        return float(total_reward)
+    
     
 
     def render(self, mode='human'):
