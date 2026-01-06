@@ -91,6 +91,8 @@ class OT2Env(gym.Env):
         # Scaling normalized action [-1, 1] to actual velocity commands [-2, 2] m/s.
         max_velocity = 2.0
         velocity = action * max_velocity
+
+        velocity_magnitude = np.linalg.norm(velocity)
         
         # Creating full action array with gripper command (0). Converting to list because sim.run() expects this format.
         full_action = [float(velocity[0]), float(velocity[1]), float(velocity[2]), 0.0]
@@ -105,7 +107,7 @@ class OT2Env(gym.Env):
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
         # Calculating reward based on current distance.
-        reward = self._calculate_reward(distance_to_goal)
+        reward = self._calculate_reward(distance_to_goal, velocity_magnitude)
         
         # Checking if goal reached.
         terminated = bool(distance_to_goal < self.target_threshold)
