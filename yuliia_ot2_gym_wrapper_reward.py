@@ -46,6 +46,17 @@ class OT2Env(gym.Env):
         self.goal_position = None
         self.initial_distance = None
 
+        # Settling behavior tracking
+        self.steps_within_threshold = 0
+        self.required_settle_steps = 5
+        self.distance_history = []
+        self.velocity_history = []
+        
+        # NEW: Early stopping when stuck at 2mm
+        self.steps_near_2mm = 0  # How many steps have we been within 2mm?
+        self.max_steps_at_2mm = 10  # Give up after 10 steps at 2mm
+        self.early_stop_threshold = 0.002
+
 
 
     def reset(self, seed=None):
@@ -74,6 +85,14 @@ class OT2Env(gym.Env):
         
         # Reset step counter
         self.steps = 0
+
+        # Reset settling tracking
+        self.steps_within_threshold = 0
+        self.distance_history = []
+        self.velocity_history = []
+        
+        # NEW: Reset early stopping tracking
+        self.steps_near_2mm = 0
         
         # Verifying observation shape and dtype. These assertions catch bugs early if something goes wrong.
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
@@ -115,8 +134,22 @@ class OT2Env(gym.Env):
         # Increment step counter to track episode progress.
         self.steps += 1
         
-        # Checking if max steps reached. If max steps reached without success, episode ends as timeout.
-        truncated = bool(self.steps >= self.max_steps)
+        # NEW: Track time spent near 2mm
+        if distance_to_goal < self.early_stop_threshold:  # Within 2mm
+            self.steps_near_2mm += 1
+        else:
+            self.steps_near_2mm = 0  # Reset if we leave the 2mm zone
+        
+        # NEW: Improved truncation logic
+        truncated = False
+        
+        # Reason 1: Normal timeout
+        if self.steps >= self.max_steps:
+            truncated = True
+        
+        # Reason 2: Stuck at 2mm for too long (NEW!)
+        if self.steps_near_2mm >= self.max_steps_at_2mm:
+            truncated = True
         
         # Building new observation with updated current position and same goal
         observation = np.concatenate([
@@ -132,7 +165,10 @@ class OT2Env(gym.Env):
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist()
+            'goal_position': self.goal_position.tolist(),
+            'velocity_magnitude': float(velocity_magnitude),
+            'steps_near_2mm': int(self.steps_near_2mm),
+            'early_stopped': bool(self.steps_near_2mm >= self.max_steps_at_2mm),
         }
         
         return observation, reward, terminated, truncated, info
@@ -141,49 +177,30 @@ class OT2Env(gym.Env):
 
     def _calculate_reward(self, distance_to_goal, velocity_magnitude):
         """
-        Reward function designed to overcome "freezing at 2mm" problem.
+        Calculate reward signal to guide the RL agent's learning.
         
-        Key idea: Make each level of precision increasingly valuable,
-        so robot is motivated to push from 2mm → 1mm → 0.5mm
+        Components:
+        1. Time penalty: -0.1 per step (punish slow movement)
+        2. Distance penalty: -10 * distance (punish being far from goal)
+        3. Success bonus: +50 (big reward for reaching goal)
+        
+        Examples:
+        - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
+        - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
+        - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
+        # Time penalty: punish every step. Encourages agent to reach goal quickly, not waste time.
+        time_penalty = -0.1
         
-        # ========== DISTANCE REWARDS (Progressive) ==========
-        # Each milestone gives a BONUS, not just reduces penalty
+        # Distance penalty: punish being far from goal (farther = worse).
+        distance_penalty = -10.0 * distance_to_goal
         
-        if distance_to_goal < 0.0005:  # 0.5mm - exceptional!
-            distance_reward = 150.0
-        elif distance_to_goal < 0.001:  # 1mm - success threshold
-            distance_reward = 100.0
-        elif distance_to_goal < 0.002:  # 2mm - good progress
-            distance_reward = 60.0
-        elif distance_to_goal < 0.005:  # 5mm - on track
-            distance_reward = 30.0
-        elif distance_to_goal < 0.010:  # 10mm - getting closer
-            distance_reward = 10.0
-        else:  # Still far - linear penalty
-            distance_reward = -5.0 * distance_to_goal
+        # Success bonus: large reward for reaching the goal. Only given when distance < 1mm (target_threshold).
+        success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
         
-        # ========== TIME PENALTY (Reduced) ==========
-        # Robot needs time for precision, so we reduce this
-        time_penalty = -0.02  # Reduced from -0.1 to -0.02
+        reward = time_penalty + distance_penalty + success_bonus
         
-        # ========== VELOCITY COMPONENT (Gentle) ==========
-        # Only start caring about velocity when very close
-        velocity_penalty = 0.0
-        if distance_to_goal < 0.002:  # Within 2mm
-            # Gentle penalty: encourages slowing down but doesn't dominate
-            velocity_penalty = -5.0 * velocity_magnitude
-        
-        # ========== SUCCESS BONUS ==========
-        # Extra reward for actually reaching goal
-        success_bonus = 0.0
-        if distance_to_goal < self.target_threshold:
-            success_bonus = 200.0
-        
-        # Combine all components
-        total_reward = distance_reward + time_penalty + velocity_penalty + success_bonus
-        
-        return float(total_reward)
+        return float(reward)
     
     
 
