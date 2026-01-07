@@ -157,6 +157,7 @@ class OT2Env(gym.Env):
 
     def calculate_reward(self, distance_to_goal=None):
         distance_factor = 10
+        step_penalty_coefficient = 0.01  # Adjust as needed for step penalty
 
         # logging.warning(f'ot2_gym_wrapper:calculate_reward:distance_to_goal:{distance_to_goal}')
         prev_distance_to_goal = np.linalg.norm(self.prev_position - self.goal_position)
@@ -173,6 +174,11 @@ class OT2Env(gym.Env):
         # logging.info(f'ot2_gym_wrapper:calculate_reward:reward_moving_to_goal:{reward_moving_to_goal}')
         reward = reward + reward_moving_to_goal
         # logging.info(f'ot2_gym_wrapper:calculate_reward:reward:2:{reward}')
+
+        # Add penalty for the number of steps taken
+        step_penalty = -step_penalty_coefficient * self.steps
+        reward += step_penalty
+
         return reward
 
     def close(self):
