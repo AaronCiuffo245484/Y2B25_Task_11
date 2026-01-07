@@ -197,8 +197,12 @@ class OT2Env(gym.Env):
         
         # Success bonus: large reward for reaching the goal. Only given when distance < 1mm (target_threshold).
         success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
+
+        threshold_bonus = 0.0
+        if distance_to_goal < 0.001:  # Crossed into 1mm zone
+            threshold_bonus = 30.0
         
-        reward = time_penalty + distance_penalty + success_bonus
+        reward = time_penalty + distance_penalty + success_bonus + threshold_bonus
         
         return float(reward)
     
