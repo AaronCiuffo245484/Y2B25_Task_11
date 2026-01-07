@@ -190,7 +190,7 @@ class OT2Env(gym.Env):
         - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
         # Time penalty: punish every step. Encourages agent to reach goal quickly, not waste time.
-        time_penalty = -0.1
+        time_penalty = -0.02
         
         # Distance penalty: punish being far from goal (farther = worse).
         distance_penalty = -10.0 * distance_to_goal

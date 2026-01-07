@@ -96,7 +96,7 @@ def move_to_target_rl(sim, model, target_pos, max_steps=300, tolerance=0.001,
 
 
 print("Loading trained model...")
-model = PPO.load(r"C:\Users\USER\Documents\GitHub\Y2B25_Task_11\models\260105.1425_yuliia_lr1e-4_b128_s2048_th1mm.zip") 
+model = PPO.load(r"C:\Users\USER\Documents\GitHub\Y2B25_Task_11\models\260107.1306_yuliia_lr1e-4_b128_s2048_th1mm.zip") 
 
 # Testting RL controller with same target as for PID controller.
 target = [0.2, 0.2, 0.2]
