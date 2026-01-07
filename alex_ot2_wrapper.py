@@ -64,7 +64,6 @@ class OT2Env(gym.Env):
         self.steps = 0
         self.goal_position = None
         self.initial_distance = None
-        self.prev_distance = None
     
     def reset(self, seed=None):
         """Reset environment to initial state with new random goal."""
@@ -85,7 +84,6 @@ class OT2Env(gym.Env):
         
         # Store initial distance for reward scaling
         self.initial_distance = float(np.linalg.norm(current_pos - self.goal_position))
-        self.prev_distance = self.initial_distance
         
         # Create normalized observation
         observation = np.concatenate([
@@ -125,10 +123,7 @@ class OT2Env(gym.Env):
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
         # Calculate reward
-        reward = self._calculate_reward(distance_to_goal, self.prev_distance, action)
-        
-        # Update previous distance for next step
-        self.prev_distance = distance_to_goal
+        reward = self._calculate_reward(distance_to_goal)
         
         # Check if goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
@@ -158,46 +153,33 @@ class OT2Env(gym.Env):
         
         return observation, reward, terminated, truncated, info
     
-    def _calculate_reward(self, distance_to_goal: float, prev_distance: float, action: np.ndarray) -> float:
+    def _calculate_reward(self, distance_to_goal):
         """
-        PROGRESS-BASED REWARD (single function)
-
-        Fixes orbiting by:
-        - rewarding *progress* (distance decreasing)
-        - penalizing moving away from the goal
-        - penalizing large actions, especially near the goal (reduces overshoot/circling)
-        - keeping a terminal success bonus
+        SIMPLIFIED REWARD FUNCTION
+        
+        Goal: Encourage fast, decisive movement to target.
+        
+        Components:
+        1. Time penalty: -0.1 per step (punish slow movement)
+        2. Distance penalty: -10 * distance (punish being far from goal)
+        3. Success bonus: +50 (big reward for reaching goal)
+        
+        Examples:
+        - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
+        - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
+        - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
-        # Always apply a small time penalty (encourages faster solutions)
-        time_penalty = -0.02
-
-        # Progress shaping (potential-based): positive if distance decreases this step
-        progress = float(prev_distance - distance_to_goal)
-        progress_reward = 200.0 * progress
-
-        # Penalize moving away (strongly discourages circling/backtracking)
-        away_penalty = -1.0 if progress < -1e-6 else 0.0
-
-        # Smoothness / energy penalty (discourage thrashing)
-        # action is normalized [-1,1], so ||action||^2 is well-bounded
-        action = np.asarray(action, dtype=np.float32)
-        action_penalty = -0.05 * float(np.dot(action, action))
-
-        # Extra "slow down" penalty when close to the goal (reduces overshoot/orbit)
-        near = distance_to_goal < (3.0 * self.target_threshold)
-        near_goal_penalty = -0.2 * float(np.linalg.norm(action)) if near else 0.0
-
-        # Terminal success bonus
+        # Time penalty - punish every step
+        time_penalty = -0.1
+        
+        # Distance penalty - punish being far from goal
+        distance_penalty = -10.0 * distance_to_goal
+        
+        # Success bonus
         success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
-
-        reward = (
-            time_penalty
-            + progress_reward
-            + away_penalty
-            + action_penalty
-            + near_goal_penalty
-            + success_bonus
-        )
+        
+        reward = time_penalty + distance_penalty + success_bonus
+        
         return float(reward)
     
     def render(self, mode='human'):
