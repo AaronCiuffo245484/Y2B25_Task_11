@@ -32,36 +32,36 @@ def move_to_target_rl(sim, model, target_pos, max_steps=300, tolerance=0.001):
         steps: Number of steps taken
         success: True if reached target
     """
-    # Reset simulation and get starting position
+    # Resetting simulation and getting starting position
     state = sim.reset(num_agents=1)
     robot_id = list(state.keys())[0]
     current_pos = np.array(state[robot_id]["pipette_position"], dtype=np.float32)
     
-    # Normalize target
+    # Normalize target: Converting target to numpy array and normalize it to [-1, 1] range. (RL model was trained with normalized positions, so we must normalize here too).
     goal_position = np.array(target_pos, dtype=np.float32)
     goal_normalized = normalize_position(goal_position)
     
     distances = []
-    settle_count = 0  # Track settling (like PID)
+    settle_count = 0  # To track settling 
     
     for step in range(max_steps):
-        # Normalize current position
+        # Normalizing current position to [-1, 1]
         current_normalized = normalize_position(current_pos)
         
-        # Build observation
+        # Building observation [current_x, current_y, current_z, goal_x, goal_y, goal_z]
         obs = np.concatenate([current_normalized, goal_normalized], dtype=np.float32)
         
-        # Get action from RL model (use deterministic=True for consistency)
+        # Getting action from RL model. Model outputs normalized action in [-1, 1] range and deterministic parameter controls if model adds exploration noise.
         action, _states = model.predict(obs, deterministic=True)
         
-        # Scale to velocity
+        # Scaling action to velocity. Model outputs [-1, 1], we convert to [-2, 2] m/s.
         velocity = scale_action_to_velocity(action)
         
         # Calculate distance
         distance = np.linalg.norm(current_pos - goal_position)
         distances.append(distance)
         
-        # Check settling (similar to PID - 20 consecutive steps within tolerance)
+        # Check settling (similar to my PID controller, 20 steps within tolerance to make sure it does not overshoot)
         if distance < tolerance:
             settle_count += 1
             if settle_count >= 20:
@@ -70,25 +70,24 @@ def move_to_target_rl(sim, model, target_pos, max_steps=300, tolerance=0.001):
         else:
             settle_count = 0
         
-        # Send velocity command
+        # Send velocity command (convert to list format)
         actions = [[float(velocity[0]), float(velocity[1]), float(velocity[2]), 0]]
         state = sim.run(actions, num_steps=1)
         
-        # Get new position
+        # Getting new position for next iteration
         robot_id = list(state.keys())[0]
         current_pos = np.array(state[robot_id]["pipette_position"], dtype=np.float32)
     
-    # Timeout
+    # If timeout
     print(f"  Max steps reached")
     return distances, max_steps, False
 
 
 # Load trained model
-print("Loading trained model...")
-model = PPO.load(r"C:\Users\USER\Documents\GitHub\Y2B25_Task_11\models\260107.1306_yuliia_lr1e-4_b128_s2048_th1mm.zip")
+model = PPO.load(r"C:\Users\USER\Documents\GitHub\Y2B25_Task_11\models\260107.1544_yuliia_lr1e-4_b128_s2048_th1mm.zip")
 print("Model loaded")
 
-# Generate 5 random targets (SAME SEED AS PID for fair comparison!)
+# Generating 5 random targets with teh same seed as PID for truthful comparison.
 np.random.seed(42)
 targets = []
 for i in range(5):
@@ -104,7 +103,7 @@ for i, target in enumerate(targets, 1):
     print(f"  Target {i}: [{target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}]")
 print()
 
-# Test each target
+# Testing each target
 all_results = []
 colors = ['blue', 'green', 'orange', 'red', 'purple']
 
@@ -122,7 +121,7 @@ for i, target in enumerate(targets, 1):
 # Close simulation
 sim.close()
 
-# Plot all trajectories (SAME FORMAT AS PID PLOT)
+# Plot all trajectories in the same format as PID plot
 plt.figure(figsize=(12, 6))
 
 for i, result in enumerate(all_results):
@@ -138,12 +137,11 @@ plt.legend(fontsize=9)
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('rl_multiple_targets.png', dpi=150, bbox_inches='tight')
-print("✓ Plot saved: rl_multiple_targets.png")
+print("Plot saved: rl_multiple_targets.png")
 plt.close()
 
-# Print summary (SAME FORMAT AS PID)
+# Print summary
 print("\nSummary:")
-print("=" * 60)
 for i, result in enumerate(all_results, 1):
     status = "SUCCESS" if result['success'] else "TIMEOUT"
     final_error = result['distances'][-1]
@@ -159,4 +157,3 @@ print(f"Average steps: {avg_steps:.1f}")
 
 avg_final_error = np.mean([r['distances'][-1] for r in all_results])
 print(f"Average final error: {avg_final_error:.6f} m ({avg_final_error*1000:.3f} mm)")
-print("=" * 60)

@@ -34,3 +34,4 @@ Thumbs.db
 
 # ClearML local cache (if any)
 .clearml/
+rl_5_targets.gif
