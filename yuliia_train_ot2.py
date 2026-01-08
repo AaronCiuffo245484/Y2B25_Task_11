@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 
-from yuliia_ot2_gym_wrapper_reward import OT2Env
+from yuliia_ot2_gym_wrapper import OT2Env
 
 PERSON_NAME = "yuliia"
 BRANCH_NAME = "yuliia"  

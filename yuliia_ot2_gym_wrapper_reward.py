@@ -190,19 +190,15 @@ class OT2Env(gym.Env):
         - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
         # Time penalty: punish every step. Encourages agent to reach goal quickly, not waste time.
-        time_penalty = -0.02
+        time_penalty = -0.1
         
         # Distance penalty: punish being far from goal (farther = worse).
         distance_penalty = -10.0 * distance_to_goal
         
         # Success bonus: large reward for reaching the goal. Only given when distance < 1mm (target_threshold).
         success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
-
-        threshold_bonus = 0.0
-        if distance_to_goal < 0.001:  # Crossed into 1mm zone
-            threshold_bonus = 30.0
         
-        reward = time_penalty + distance_penalty + success_bonus + threshold_bonus
+        reward = time_penalty + distance_penalty + success_bonus
         
         return float(reward)
     
