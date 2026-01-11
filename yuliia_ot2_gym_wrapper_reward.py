@@ -47,15 +47,8 @@ class OT2Env(gym.Env):
         self.initial_distance = None
 
         # Settling behavior tracking
-        self.steps_within_threshold = 0
-        self.required_settle_steps = 5
-        self.distance_history = []
-        self.velocity_history = []
-        
-        # NEW: Early stopping when stuck at 2mm
-        self.steps_near_2mm = 0  # How many steps have we been within 2mm?
-        self.max_steps_at_2mm = 10  # Give up after 10 steps at 2mm
-        self.early_stop_threshold = 0.002
+        self.steps_settled = 0
+        self.required_settle_steps = 10
 
 
 
@@ -87,12 +80,7 @@ class OT2Env(gym.Env):
         self.steps = 0
 
         # Reset settling tracking
-        self.steps_within_threshold = 0
-        self.distance_history = []
-        self.velocity_history = []
-        
-        # NEW: Reset early stopping tracking
-        self.steps_near_2mm = 0
+        self.steps_settled = 0
         
         # Verifying observation shape and dtype. These assertions catch bugs early if something goes wrong.
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
@@ -110,8 +98,6 @@ class OT2Env(gym.Env):
         # Scaling normalized action [-1, 1] to actual velocity commands [-2, 2] m/s.
         max_velocity = 2.0
         velocity = action * max_velocity
-
-        velocity_magnitude = np.linalg.norm(velocity)
         
         # Creating full action array with gripper command (0). Converting to list because sim.run() expects this format.
         full_action = [float(velocity[0]), float(velocity[1]), float(velocity[2]), 0.0]
@@ -125,31 +111,22 @@ class OT2Env(gym.Env):
         # Calculating Euclidean distance from current position to goal.
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # Calculating reward based on current distance.
-        reward = self._calculate_reward(distance_to_goal, velocity_magnitude)
+        reward = self._calculate_reward(distance_to_goal)
         
-        # Checking if goal reached.
-        terminated = bool(distance_to_goal < self.target_threshold)
+        # Just check if within threshold
+        if distance_to_goal < self.target_threshold:  # < 1mm
+            self.steps_settled += 1
+        else:
+            self.steps_settled = 0  # Reset if leave zone
+
+        # Success after 10 consecutive steps within 1mm
+        terminated = bool(self.steps_settled >= 10)
         
         # Increment step counter to track episode progress.
         self.steps += 1
         
-        # NEW: Track time spent near 2mm
-        if distance_to_goal < self.early_stop_threshold:  # Within 2mm
-            self.steps_near_2mm += 1
-        else:
-            self.steps_near_2mm = 0  # Reset if we leave the 2mm zone
-        
-        # NEW: Improved truncation logic
-        truncated = False
-        
-        # Reason 1: Normal timeout
-        if self.steps >= self.max_steps:
-            truncated = True
-        
-        # Reason 2: Stuck at 2mm for too long (NEW!)
-        if self.steps_near_2mm >= self.max_steps_at_2mm:
-            truncated = True
+        # Checking if max steps reached. If max steps reached without success, episode ends as timeout.
+        truncated = bool(self.steps >= self.max_steps)
         
         # Building new observation with updated current position and same goal
         observation = np.concatenate([
@@ -165,10 +142,7 @@ class OT2Env(gym.Env):
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist(),
-            'velocity_magnitude': float(velocity_magnitude),
-            'steps_near_2mm': int(self.steps_near_2mm),
-            'early_stopped': bool(self.steps_near_2mm >= self.max_steps_at_2mm),
+            'goal_position': self.goal_position.tolist()
         }
         
         return observation, reward, terminated, truncated, info
