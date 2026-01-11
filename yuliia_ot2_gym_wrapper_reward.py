@@ -149,7 +149,7 @@ class OT2Env(gym.Env):
 
 
 
-    def _calculate_reward(self, distance_to_goal, velocity_magnitude):
+    def _calculate_reward(self, distance_to_goal):
         """
         Calculate reward signal to guide the RL agent's learning.
         
