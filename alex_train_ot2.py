@@ -14,13 +14,13 @@ from datetime import datetime
 import numpy as np
 
 # Import wrapper
-from aaron_ot2_wrapper import OT2Env
+from alex_ot2_wrapper import OT2Env
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-PERSON_NAME = "aaron"
-BRANCH_NAME = "dead_simple"  # Change this to your branch name
+PERSON_NAME = "alex"
+BRANCH_NAME = "Alex"  # Change this to your branch name
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")
