@@ -20,7 +20,7 @@ from alex_ot2_wrapper import OT2Env
 # CONFIGURATION
 # ============================================================================
 PERSON_NAME = "alex"
-BRANCH_NAME = "Alex"  # Change this to your branch name
+BRANCH_NAME = "Alex"  
 
 # Generate timestamp for unique task name and model filename
 timestamp = datetime.now().strftime("%y%m%d.%H%M")

@@ -64,8 +64,6 @@ class OT2Env(gym.Env):
         self.steps = 0
         self.goal_position = None
         self.initial_distance = None
-        self.last_action = np.zeros(3, dtype=np.float32)
-        self.consecutive_success_steps = 0
     
     def reset(self, seed=None):
         """Reset environment to initial state with new random goal."""
@@ -93,10 +91,8 @@ class OT2Env(gym.Env):
             self._normalize_position(self.goal_position)
         ], dtype=np.float32)
         
-        # Reset step counter and action tracking
+        # Reset step counter
         self.steps = 0
-        self.last_action = np.zeros(3, dtype=np.float32)
-        self.consecutive_success_steps = 0
         
         # Verify observation shape and dtype
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
@@ -126,18 +122,8 @@ class OT2Env(gym.Env):
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # Track if at goal
-        at_goal = distance_to_goal < self.target_threshold
-        if at_goal:
-            self.consecutive_success_steps += 1
-        else:
-            self.consecutive_success_steps = 0
-        
-        # Calculate reward (now includes action magnitude)
-        reward = self._calculate_reward(distance_to_goal, action, at_goal)
-        
-        # Store action for next step
-        self.last_action = action.copy()
+        # Calculate reward
+        reward = self._calculate_reward(distance_to_goal)
         
         # Check if goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
@@ -162,30 +148,26 @@ class OT2Env(gym.Env):
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist(),
-            'action_magnitude': float(np.linalg.norm(action)),
-            'consecutive_success_steps': self.consecutive_success_steps
+            'goal_position': self.goal_position.tolist()
         }
         
         return observation, reward, terminated, truncated, info
     
-    def _calculate_reward(self, distance_to_goal, action, at_goal):
+    def _calculate_reward(self, distance_to_goal):
         """
-        IMPROVED REWARD FUNCTION - Encourages stopping at target
+        SIMPLIFIED REWARD FUNCTION
         
-        Goal: Reach target quickly AND stay still when there.
+        Goal: Encourage fast, decisive movement to target.
         
         Components:
         1. Time penalty: -0.1 per step (punish slow movement)
         2. Distance penalty: -10 * distance (punish being far from goal)
-        3. Movement penalty: -2 * action_magnitude (punish unnecessary movement)
-        4. Stability bonus: +1.0 when at goal with low movement (reward stopping)
-        5. Success bonus: +50 (big reward for reaching goal)
+        3. Success bonus: +50 (big reward for reaching goal)
         
-        This teaches the agent to:
-        - Move quickly to target (distance penalty + time penalty)
-        - Use minimal movement when at target (movement penalty + stability bonus)
-        - Stop wiggling once goal is reached
+        Examples:
+        - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
+        - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
+        - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
         """
         # Time penalty - punish every step
         time_penalty = -0.1
@@ -193,22 +175,10 @@ class OT2Env(gym.Env):
         # Distance penalty - punish being far from goal
         distance_penalty = -10.0 * distance_to_goal
         
-        # Movement penalty - punish large actions (encourages minimal movement)
-        action_magnitude = np.linalg.norm(action)
-        movement_penalty = -2.0 * action_magnitude
+        # Success bonus
+        success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
         
-        # Stability bonus - reward being still when at goal
-        # This is key to preventing wiggling!
-        if at_goal and action_magnitude < 0.1:  # At goal and nearly still
-            stability_bonus = 1.0
-        else:
-            stability_bonus = 0.0
-        
-        # Success bonus - big reward for being at goal
-        success_bonus = 50.0 if at_goal else 0.0
-        
-        # Total reward
-        reward = time_penalty + distance_penalty + movement_penalty + stability_bonus + success_bonus
+        reward = time_penalty + distance_penalty + success_bonus
         
         return float(reward)
     
