@@ -15,11 +15,11 @@ class OT2Env(gym.Env):
     """
     Custom Gymnasium environment for OT-2 robot control.
     
-    SIMPLIFIED VERSION - Focus on fast, decisive movement to target.
+    SIMPLIFIED VERSION - Focus on fast, decisive movement to target AND staying there.
     
     Observation Space: 6D [current_x, current_y, current_z, goal_x, goal_y, goal_z] (normalized)
     Action Space: 3D [x, y, z] velocities normalized to [-1, 1]
-    Reward: Time penalty + Distance penalty + Success bonus
+    Reward: Time penalty + Distance penalty + Success bonus + Penalties for leaving target
     
     Parameters
     ----------
@@ -28,15 +28,18 @@ class OT2Env(gym.Env):
     max_steps : int
         Maximum steps per episode before truncation (default: 300)
     target_threshold : float
-        Distance threshold (meters) for successful goal achievement (default: 0.005 = 5mm)
+        Distance threshold (meters) for successful goal achievement (default: 0.001 = 1mm)
+    min_success_steps : int
+        Minimum number of consecutive steps within target to consider success (default: 10)
     """
     
-    def __init__(self, render=False, max_steps=300, target_threshold=0.005):
+    def __init__(self, render=False, max_steps=300, target_threshold=0.001, min_success_steps=10):
         super(OT2Env, self).__init__()
         
         self.render_mode = render
         self.max_steps = max_steps
         self.target_threshold = target_threshold
+        self.min_success_steps = min_success_steps  # NEW: require staying at target
         
         # Create simulation
         self.sim = Simulation(num_agents=1, render=render)
@@ -93,6 +96,8 @@ class OT2Env(gym.Env):
         
         # Reset step counter
         self.steps = 0
+        self.last_action = np.zeros(3, dtype=np.float32)
+        self.consecutive_success_steps = 0
         
         # Verify observation shape and dtype
         assert observation.shape == (6,), f"Observation shape is {observation.shape}, expected (6,)"
@@ -122,8 +127,18 @@ class OT2Env(gym.Env):
         # Calculate distance to goal
         distance_to_goal = np.linalg.norm(current_pos - self.goal_position)
         
-        # Calculate reward
-        reward = self._calculate_reward(distance_to_goal)
+        # Track if at goal
+        at_goal = distance_to_goal < self.target_threshold
+        if at_goal:
+            self.consecutive_success_steps += 1
+        else:
+            self.consecutive_success_steps = 0
+        
+        # Calculate reward (now includes action magnitude)
+        reward = self._calculate_reward(distance_to_goal, action, at_goal)
+        
+        # Store action for next step
+        self.last_action = action.copy()
         
         # Check if goal reached
         terminated = bool(distance_to_goal < self.target_threshold)
@@ -148,26 +163,30 @@ class OT2Env(gym.Env):
         info = {
             'distance_to_goal': float(distance_to_goal),
             'current_position': current_pos.tolist(),
-            'goal_position': self.goal_position.tolist()
+            'goal_position': self.goal_position.tolist(),
+            'action_magnitude': float(np.linalg.norm(action)),
+            'consecutive_success_steps': self.consecutive_success_steps
         }
         
         return observation, reward, terminated, truncated, info
     
     def _calculate_reward(self, distance_to_goal):
         """
-        SIMPLIFIED REWARD FUNCTION
+        IMPROVED REWARD FUNCTION - Encourages stopping at target
         
-        Goal: Encourage fast, decisive movement to target.
+        Goal: Reach target quickly AND stay still when there.
         
         Components:
         1. Time penalty: -0.1 per step (punish slow movement)
         2. Distance penalty: -10 * distance (punish being far from goal)
-        3. Success bonus: +50 (big reward for reaching goal)
+        3. Movement penalty: -2 * action_magnitude (punish unnecessary movement)
+        4. Stability bonus: +1.0 when at goal with low movement (reward stopping)
+        5. Success bonus: +50 (big reward for reaching goal)
         
-        Examples:
-        - Reach goal in 100 steps: -10 (time) + -0.05 (distance) + 50 (success) = ~40
-        - Reach goal in 200 steps: -20 (time) + -0.05 (distance) + 50 (success) = ~30
-        - Timeout without reaching: -30 (time) + -0.1 (distance) = -30.1
+        This teaches the agent to:
+        - Move quickly to target (distance penalty + time penalty)
+        - Use minimal movement when at target (movement penalty + stability bonus)
+        - Stop wiggling once goal is reached
         """
         # Time penalty - punish every step
         time_penalty = -0.1
@@ -175,10 +194,22 @@ class OT2Env(gym.Env):
         # Distance penalty - punish being far from goal
         distance_penalty = -10.0 * distance_to_goal
         
-        # Success bonus
-        success_bonus = 50.0 if distance_to_goal < self.target_threshold else 0.0
+        # Movement penalty - punish large actions (encourages minimal movement)
+        action_magnitude = np.linalg.norm(action)
+        movement_penalty = -2.0 * action_magnitude
         
-        reward = time_penalty + distance_penalty + success_bonus
+        # Stability bonus - reward being still when at goal
+        # This is key to preventing wiggling!
+        if at_goal and action_magnitude < 0.1:  # At goal and nearly still
+            stability_bonus = 1.0
+        else:
+            stability_bonus = 0.0
+        
+        # Success bonus - big reward for being at goal
+        success_bonus = 50.0 if at_goal else 0.0
+        
+        # Total reward
+        reward = time_penalty + distance_penalty + movement_penalty + stability_bonus + success_bonus
         
         return float(reward)
     
